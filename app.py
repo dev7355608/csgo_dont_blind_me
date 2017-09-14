@@ -104,7 +104,7 @@ def main():
     data = request.json
     f1 = extract(data, 'player', 'state', 'flashed', default=0)
     f0 = extract(data, 'previously', 'player', 'state', 'flashed', default=f1)
-
+    
     if f0 > 0 or f1 > 0:
         if f0 < f1:
             set_brightness(0)
@@ -112,7 +112,7 @@ def main():
         if f0 > f1:
             if f1 > 127:
                 set_contrast((127 - (f1 - 128)) / 127)
-            elif not set_contrast(1):
+            elif not set_contrast(1) or f1 == 0:
                 set_brightness((127 - f1) / 127)
 
     return ''
