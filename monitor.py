@@ -30,9 +30,6 @@ SetMonitorContrast = windll.dxva2.SetMonitorContrast
 GetDeviceGammaRamp = windll.gdi32.GetDeviceGammaRamp
 SetDeviceGammaRamp = windll.gdi32.SetDeviceGammaRamp
 
-WORD_MAX_VALUE = pow(2, sizeof(WORD) * 8) - 1
-GAMMA_RAMP_SIZE = 256
-
 
 class PHYSICAL_MONITOR(Structure):
     _fields_ = [('hPhysicalMonitor', HANDLE),
@@ -154,20 +151,20 @@ def release_dc(device):
 
 
 def get_device_gamma_ramp(device):
-    ramp = (WORD * GAMMA_RAMP_SIZE * 3)()
+    ramp = (WORD * 256 * 3)()
 
     if not GetDeviceGammaRamp(device, byref(ramp)):
         raise WinError()
 
-    return [[int(ramp[i][j]) for j in range(GAMMA_RAMP_SIZE)]
+    return [[int(ramp[i][j]) for j in range(256)]
             for i in range(3)]
 
 
 def set_device_gamma_ramp(device, ramp):
-    _ramp = (WORD * GAMMA_RAMP_SIZE * 3)()
+    _ramp = (WORD * 256 * 3)()
 
     for i in range(3):
-        for j in range(GAMMA_RAMP_SIZE):
+        for j in range(256):
             _ramp[i][j] = WORD(ramp[i][j])
 
     if not SetDeviceGammaRamp(device, byref(_ramp)):
