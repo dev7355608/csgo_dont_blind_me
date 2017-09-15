@@ -1,6 +1,8 @@
 import atexit
 import json
 import logging
+import os
+import sys
 from flask import Flask, request
 from monitor import *
 from winreg import HKEY_LOCAL_MACHINE, KEY_READ, KEY_WRITE, REG_DWORD
@@ -59,7 +61,12 @@ def extract(data, *keys, default=None):
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
-with open('settings.json') as f:
+if getattr(sys, 'frozen', False):
+    application_path = os.path.dirname(sys.executable)
+elif __file__:
+    application_path = os.path.dirname(__file__)
+
+with open(os.path.join(application_path, 'settings.json')) as f:
     settings = json.load(f)
 
 app = Flask(__name__)
