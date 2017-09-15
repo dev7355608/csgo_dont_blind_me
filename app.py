@@ -134,20 +134,32 @@ elif method == 'GAMMA':
         set_device_gamma_ramp(device, gamma_ramp)
     except Exception as e:
         # device does not support gamma ramp
+        gamma_ramp = None
         raise e
 
+    # device supports gamma ramp
+
     def reset_gamma_ramp():
-        set_device_gamma_ramp(device, gamma_ramp)
+        if gamma_ramp is not None:
+            set_device_gamma_ramp(device, gamma_ramp)
 
     atexit.register(reset_gamma_ramp)
 
-    # device supports gamma ramp
+    mat_monitorgamma = settings.get('mat_monitorgamma')
+    mat_monitorgamma_tv_enabled = settings.get('mat_monitorgamma_tv_enabled')
+
+    if mat_monitorgamma_tv_enabled:
+        gamma = 2.5 / mat_monitorgamma
+        remap = (16, 235)
+    else:
+        gamma = 2.2 / mat_monitorgamma
+        remap = (0, 255)
+
     # now test if the device supports the full gamma range that is required
 
     def test_gamma_ramp():
-        set_device_gamma_ramp(device, [[0] * 256 for i in range(3)])
-        set_gamma_ramp(device, 2.5 / 1.6)
-        set_device_gamma_ramp(device, gamma_ramp)
+        set_gamma_ramp(device, gamma, 0.0, remap)
+        set_gamma_ramp(device, gamma, 1.0, remap)
 
     try:
         test_gamma_ramp()
@@ -191,16 +203,6 @@ elif method == 'GAMMA':
                 'Device does not support the full gamma range') from e
 
     # device supports full range gamma ramp
-
-    mat_monitorgamma = settings.get('mat_monitorgamma')
-    mat_monitorgamma_tv_enabled = settings.get('mat_monitorgamma_tv_enabled')
-
-    if mat_monitorgamma_tv_enabled:
-        gamma = 2.5 / mat_monitorgamma
-        remap = (16, 235)
-    else:
-        gamma = 2.2 / mat_monitorgamma
-        remap = (0, 255)
 
     set_gamma_ramp(device, gamma, 1.0, remap)
 
