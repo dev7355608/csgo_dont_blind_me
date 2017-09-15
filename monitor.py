@@ -15,6 +15,9 @@ MONITORENUMPROC = WINFUNCTYPE(BOOL, HMONITOR, HDC, POINTER(RECT), LPARAM)
 PHYSICAL_MONITOR_DESCRIPTION_SIZE = 128
 MONITORINFOF_PRIMARY = 1
 
+COLORMGMTCAPS = 121
+CM_GAMMA_RAMP = 2
+
 EnumDisplayMonitors = windll.user32.EnumDisplayMonitors
 GetMonitorInfo = windll.user32.GetMonitorInfoW
 GetDC = windll.user32.GetDC
@@ -27,6 +30,7 @@ GetMonitorBrightness = windll.dxva2.GetMonitorBrightness
 SetMonitorBrightness = windll.dxva2.SetMonitorBrightness
 GetMonitorContrast = windll.dxva2.GetMonitorContrast
 SetMonitorContrast = windll.dxva2.SetMonitorContrast
+GetDeviceCaps = windll.gdi32.GetDeviceCaps
 GetDeviceGammaRamp = windll.gdi32.GetDeviceGammaRamp
 SetDeviceGammaRamp = windll.gdi32.SetDeviceGammaRamp
 
@@ -154,6 +158,10 @@ def get_device_gamma_ramp(device):
     ramp = (WORD * 256 * 3)()
 
     if not GetDeviceGammaRamp(device, byref(ramp)):
+        if not GetDeviceCaps(device, COLORMGMTCAPS) & CM_GAMMA_RAMP:
+            raise RuntimeError(
+                'Device [{:#x}] does not support GetDeviceGammaRamp'.format(
+                    device)) from WinError()
         raise WinError()
 
     return [[int(ramp[i][j]) for j in range(256)]
@@ -168,4 +176,8 @@ def set_device_gamma_ramp(device, ramp):
             _ramp[i][j] = WORD(ramp[i][j])
 
     if not SetDeviceGammaRamp(device, byref(_ramp)):
+        if not GetDeviceCaps(device, COLORMGMTCAPS) & CM_GAMMA_RAMP:
+            raise RuntimeError(
+                'Device [{:#x}] does not support SetDeviceGammaRamp'.format(
+                    device)) from WinError()
         raise WinError()
