@@ -3,6 +3,8 @@ import json
 import logging
 from flask import Flask, request
 from monitor import *
+from winreg import HKEY_LOCAL_MACHINE, KEY_READ, KEY_WRITE, REG_DWORD
+from winreg import OpenKey, CloseKey, QueryValueEx, SetValueEx
 
 
 def interpolate(value, minimum, maximum):
@@ -42,8 +44,8 @@ def set_gamma_ramp(device, gamma, brightness=1.0, remap=(0, 255)):
         y = pow(x / 256 * brightness, 1 / gamma)
         return int(256 * (remap[0] + y * (remap[1] + 1 - remap[0])))
 
-    set_device_gamma_ramp(device, [[f(c) for c in range(256)]
-                                   for i in range(3)])
+    ramp = [[f(c) for c in range(256)] for i in range(3)]
+    set_device_gamma_ramp(device, ramp)
 
 
 def extract(data, *keys, default=None):
@@ -96,8 +98,8 @@ if method == 'DDC/CI':
 
     atexit.register(destroy_monitors)
 
-    set_brightness(monitors, 1)
-    set_contrast(monitors, 1)
+    set_brightness(monitors, 1.0)
+    set_contrast(monitors, 1.0)
 
     @app.route('/', methods=['POST'])
     def main():
@@ -108,24 +110,87 @@ if method == 'DDC/CI':
 
         if f0 > 0 or f1 > 0:
             if f0 < f1:
-                set_brightness(monitors, 0)
-                set_contrast(monitors, 0)
+                set_brightness(monitors, 0.0)
+                set_contrast(monitors, 0.0)
             if f0 > f1:
                 if f1 > 127:
-                    set_contrast(monitors, 1 - (f1 - 128) / 127)
-                elif not set_contrast(monitors, 1) or f1 == 0:
-                    set_brightness(monitors, 1 - f1 / 127)
+                    set_contrast(monitors, 1.0 - (f1 - 128) / 127)
+                elif not set_contrast(monitors, 1.0) or f1 == 0:
+                    set_brightness(monitors, 1.0 - f1 / 127)
 
         return ''
 elif method == 'GAMMA':
     device = get_dc()
-    gamma_ramp = get_device_gamma_ramp(device)
+
+    def release_device():
+        release_dc(device)
+
+    atexit.register(release_device)
+
+    # test if gamma ramp is supported
+
+    try:
+        gamma_ramp = get_device_gamma_ramp(device)
+        set_device_gamma_ramp(device, gamma_ramp)
+    except Exception as e:
+        # device does not support gamma ramp
+        raise e
 
     def reset_gamma_ramp():
         set_device_gamma_ramp(device, gamma_ramp)
-        release_dc(device)
 
     atexit.register(reset_gamma_ramp)
+
+    # device supports gamma ramp
+    # now test if the device supports the full gamma range that is required
+
+    def test_gamma_ramp():
+        set_device_gamma_ramp(device, [[0] * 256 for i in range(3)])
+        set_gamma_ramp(device, 2.5 / 1.6)
+        set_device_gamma_ramp(device, gamma_ramp)
+
+    try:
+        test_gamma_ramp()
+    except Exception as e:
+        def open_key(access):
+            return OpenKey(HKEY_LOCAL_MACHINE,
+                           r'SOFTWARE\Microsoft\Windows NT\CurrentVersion\ICM',
+                           access=access)
+
+        key = open_key(KEY_READ)
+        gamma_range = QueryValueEx(key, 'GdiIcmGammaRange')[0]
+        CloseKey(key)
+
+        try:
+            if gamma_range == 256:
+                # gamma range is already at maximum
+                raise e
+
+            # set to gamma range to 256 and repeat test
+
+            try:
+                key = open_key(KEY_WRITE)
+            except PermissionError:
+                print('Gamma range is currently limited. Please restart with '
+                      'admin privileges in order to set it to maximum range!')
+                exit()
+
+            SetValueEx(key, 'GdiIcmGammaRange', 0, REG_DWORD, 256)
+            CloseKey(key)
+
+            def reset_gamma_range():
+                key = open_key(KEY_WRITE)
+                SetValueEx(key, 'GdiIcmGammaRange', 0, REG_DWORD, gamma_range)
+                CloseKey(key)
+
+            atexit.register(reset_gamma_range)
+
+            test_gamma_ramp()
+        except:
+            raise RuntimeError(
+                'Device does not support the full gamma range') from e
+
+    # device supports full range gamma ramp
 
     mat_monitorgamma = settings.get('mat_monitorgamma')
     mat_monitorgamma_tv_enabled = settings.get('mat_monitorgamma_tv_enabled')
@@ -137,7 +202,7 @@ elif method == 'GAMMA':
         gamma = 2.2 / mat_monitorgamma
         remap = (0, 255)
 
-    set_gamma_ramp(device, gamma, 1, remap)
+    set_gamma_ramp(device, gamma, 1.0, remap)
 
     @app.route('/', methods=['POST'])
     def main():
@@ -147,9 +212,9 @@ elif method == 'GAMMA':
                      default=f1)
 
         if f0 < f1:
-            set_gamma_ramp(device, gamma, 0, remap)
+            set_gamma_ramp(device, gamma, 0.0, remap)
         elif f0 > f1:
-            set_gamma_ramp(device, gamma, 1 - f1 / 255, remap)
+            set_gamma_ramp(device, gamma, 1.0 - f1 / 255, remap)
 
         return ''
 
@@ -160,7 +225,7 @@ elif method == 'GAMMA':
 
     print('Don\'t forget to set the launch option -nogammaramp!\n')
 else:
-    raise Exception('invalid method "{}"'.format(method))
+    raise ValueError('invalid method "{}"'.format(method))
 
 print('Running on http://127.0.0.1:{}/ (Press CTRL+C to quit)'.format(port))
 
