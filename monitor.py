@@ -1,58 +1,37 @@
 from ctypes import windll
 from ctypes import sizeof, byref, Structure, WinError
-from ctypes import c_int, POINTER, WINFUNCTYPE
-from ctypes.wintypes import (BOOL, DWORD, HANDLE, HDC, HMONITOR, LPARAM, RECT,
-                             WCHAR)
+from ctypes import POINTER, WINFUNCTYPE
+from ctypes.wintypes import (BOOL, DWORD, HANDLE, HDC, HMONITOR, HWND, LPARAM,
+                             RECT, WCHAR, WORD)
 
 __all__ = ['enum_display_monitors', 'get_physical_monitors',
            'destroy_physical_monitor', 'destroy_physical_monitors',
-           'save_current_monitor_settings',
            'get_monitor_brightness', 'set_monitor_brightness',
            'get_monitor_contrast', 'set_monitor_contrast',
-           'get_monitor_red_green_or_blue_gain',
-           'set_monitor_red_green_or_blue_gain',
-           'get_monitor_red_gain', 'set_monitor_red_gain',
-           'get_monitor_green_gain', 'set_monitor_green_gain',
-           'get_monitor_blue_gain', 'set_monitor_blue_gain',
-           'get_monitor_red_green_and_blue_gain',
-           'set_monitor_red_green_and_blue_gain',
-           'get_monitor_red_green_or_blue_drive',
-           'set_monitor_red_green_or_blue_drive',
-           'get_monitor_red_drive', 'set_monitor_red_drive',
-           'get_monitor_green_drive', 'set_monitor_green_drive',
-           'get_monitor_blue_drive', 'set_monitor_blue_drive',
-           'get_monitor_red_green_and_blue_drive',
-           'set_monitor_red_green_and_blue_drive']
+           'get_dc', 'release_dc', 'get_device_gamma_ramp',
+           'set_device_gamma_ramp']
 
 MONITORENUMPROC = WINFUNCTYPE(BOOL, HMONITOR, HDC, POINTER(RECT), LPARAM)
 PHYSICAL_MONITOR_DESCRIPTION_SIZE = 128
 MONITORINFOF_PRIMARY = 1
 
-MC_RED_GAIN = c_int(0)
-MC_GREEN_GAIN = c_int(1)
-MC_BLUE_GAIN = c_int(2)
-MC_GAIN_TYPE = [MC_RED_GAIN, MC_GREEN_GAIN, MC_BLUE_GAIN]
-
-MC_RED_DRIVE = c_int(0)
-MC_GREEN_DRIVE = c_int(1)
-MC_BLUE_DRIVE = c_int(2)
-MC_DRIVE_TYPE = [MC_RED_DRIVE, MC_GREEN_DRIVE, MC_BLUE_DRIVE]
-
 EnumDisplayMonitors = windll.user32.EnumDisplayMonitors
 GetMonitorInfo = windll.user32.GetMonitorInfoW
+GetDC = windll.user32.GetDC
+ReleaseDC = windll.user32.ReleaseDC
 GetNumberOfPhysicalMonitorsFromHMONITOR = \
     windll.dxva2.GetNumberOfPhysicalMonitorsFromHMONITOR
 GetPhysicalMonitorsFromHMONITOR = windll.dxva2.GetPhysicalMonitorsFromHMONITOR
 DestroyPhysicalMonitor = windll.dxva2.DestroyPhysicalMonitor
-SaveCurrentMonitorSettings = windll.dxva2.SaveCurrentMonitorSettings
 GetMonitorBrightness = windll.dxva2.GetMonitorBrightness
 SetMonitorBrightness = windll.dxva2.SetMonitorBrightness
 GetMonitorContrast = windll.dxva2.GetMonitorContrast
 SetMonitorContrast = windll.dxva2.SetMonitorContrast
-GetMonitorRedGreenOrBlueGain = windll.dxva2.GetMonitorRedGreenOrBlueGain
-SetMonitorRedGreenOrBlueGain = windll.dxva2.SetMonitorRedGreenOrBlueGain
-GetMonitorRedGreenOrBlueDrive = windll.dxva2.GetMonitorRedGreenOrBlueDrive
-SetMonitorRedGreenOrBlueDrive = windll.dxva2.SetMonitorRedGreenOrBlueDrive
+GetDeviceGammaRamp = windll.gdi32.GetDeviceGammaRamp
+SetDeviceGammaRamp = windll.gdi32.SetDeviceGammaRamp
+
+WORD_MAX_VALUE = pow(2, sizeof(WORD) * 8) - 1
+GAMMA_RAMP_SIZE = 256
 
 
 class PHYSICAL_MONITOR(Structure):
@@ -117,11 +96,6 @@ def destroy_physical_monitors(monitors):
         destroy_physical_monitor(monitor)
 
 
-def save_current_monitor_settings(monitor):
-    if not SaveCurrentMonitorSettings(monitor):
-        raise WinError()
-
-
 def get_monitor_brightness(monitor):
     minimumBrightness = DWORD()
     currentBrightness = DWORD()
@@ -164,120 +138,31 @@ def set_monitor_contrast(monitor, brightness):
         raise WinError()
 
 
-def get_monitor_red_green_or_blue_gain(monitor, type):
-    minimumGain = DWORD()
-    currentGain = DWORD()
-    maximumGain = DWORD()
-
-    if not GetMonitorRedGreenOrBlueGain(monitor,
-                                        MC_GAIN_TYPE[type],
-                                        byref(minimumGain),
-                                        byref(currentGain),
-                                        byref(maximumGain)):
-        raise WinError()
-
-    return (minimumGain.value,
-            currentGain.value,
-            maximumGain.value)
+def get_dc():
+    return GetDC(HWND(None))
 
 
-def set_monitor_red_green_or_blue_gain(monitor, type, gain):
-    if not SetMonitorRedGreenOrBlueGain(monitor, MC_GAIN_TYPE[type],
-                                        DWORD(gain)):
+def release_dc(device):
+    if not ReleaseDC(HWND(None), device):
         raise WinError()
 
 
-def get_monitor_red_gain(monitor):
-    return get_monitor_red_green_or_blue_gain(monitor, 0)
+def get_device_gamma_ramp(device):
+    ramp = (WORD * GAMMA_RAMP_SIZE * 3)()
 
-
-def set_monitor_red_gain(monitor, gain):
-    set_monitor_red_green_or_blue_gain(monitor, 0, gain)
-
-
-def get_monitor_green_gain(monitor):
-    return get_monitor_red_green_or_blue_gain(monitor, 1)
-
-
-def set_monitor_green_gain(monitor, gain):
-    set_monitor_red_green_or_blue_gain(monitor, 1, gain)
-
-
-def get_monitor_blue_gain(monitor):
-    return get_monitor_red_green_or_blue_gain(monitor, 2)
-
-
-def set_monitor_blue_gain(monitor, gain):
-    set_monitor_red_green_or_blue_gain(monitor, 2, gain)
-
-
-def get_monitor_red_green_and_blue_gain(monitor):
-    return (get_monitor_red_gain(monitor),
-            get_monitor_green_gain(monitor),
-            get_monitor_blue_gain(monitor))
-
-
-def set_monitor_red_green_and_blue_gain(monitor, gainRed, gainGreen, gainBlue):
-    set_monitor_red_gain(monitor, gainRed)
-    set_monitor_green_gain(monitor, gainGreen)
-    set_monitor_blue_gain(monitor, gainBlue)
-
-
-def get_monitor_red_green_or_blue_drive(monitor, type):
-    minimumDrive = DWORD()
-    currentDrive = DWORD()
-    maximumDrive = DWORD()
-
-    if not GetMonitorRedGreenOrBlueDrive(monitor,
-                                         MC_DRIVE_TYPE[type],
-                                         byref(minimumDrive),
-                                         byref(currentDrive),
-                                         byref(maximumDrive)):
+    if not GetDeviceGammaRamp(device, byref(ramp)):
         raise WinError()
 
-    return (minimumDrive.value,
-            currentDrive.value,
-            maximumDrive.value)
+    return [[int(ramp[i][j]) for j in range(GAMMA_RAMP_SIZE)]
+            for i in range(3)]
 
 
-def set_monitor_red_green_or_blue_drive(monitor, type, drive):
-    if not SetMonitorRedGreenOrBlueDrive(monitor, MC_DRIVE_TYPE[type],
-                                         DWORD(drive)):
+def set_device_gamma_ramp(device, ramp):
+    _ramp = (WORD * GAMMA_RAMP_SIZE * 3)()
+
+    for i in range(3):
+        for j in range(GAMMA_RAMP_SIZE):
+            _ramp[i][j] = WORD(ramp[i][j])
+
+    if not SetDeviceGammaRamp(device, byref(_ramp)):
         raise WinError()
-
-
-def get_monitor_red_drive(monitor):
-    return get_monitor_red_green_or_blue_drive(monitor, 0)
-
-
-def set_monitor_red_drive(monitor, drive):
-    set_monitor_red_green_or_blue_drive(monitor, 0, drive)
-
-
-def get_monitor_green_drive(monitor):
-    return get_monitor_red_green_or_blue_drive(monitor, 1)
-
-
-def set_monitor_green_drive(monitor, drive):
-    set_monitor_red_green_or_blue_drive(monitor, 1, drive)
-
-
-def get_monitor_blue_drive(monitor):
-    return get_monitor_red_green_or_blue_drive(monitor, 2)
-
-
-def set_monitor_blue_drive(monitor, drive):
-    set_monitor_red_green_or_blue_drive(monitor, 2, drive)
-
-
-def get_monitor_red_green_and_blue_drive(monitor):
-    return (get_monitor_red_drive(monitor),
-            get_monitor_green_drive(monitor),
-            get_monitor_blue_drive(monitor))
-
-
-def set_monitor_red_green_and_blue_drive(monitor, driveRed, driveGreen,
-                                         driveBlue):
-    set_monitor_red_drive(monitor, driveRed)
-    set_monitor_green_drive(monitor, driveGreen)
-    set_monitor_blue_drive(monitor, driveBlue)

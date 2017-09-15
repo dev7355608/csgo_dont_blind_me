@@ -1,3 +1,6 @@
 {
-  "port": 54237
+  "port": 54237,
+  "method": "gamma",
+  "mat_monitorgamma": 2,
+  "mat_monitorgamma_tv_enabled": 0
 }
