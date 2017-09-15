@@ -5,8 +5,9 @@ import os
 import sys
 from flask import Flask, request
 from monitor import *
-from winreg import HKEY_LOCAL_MACHINE, KEY_READ, KEY_WRITE, REG_DWORD
-from winreg import OpenKey, CloseKey, QueryValueEx, SetValueEx
+from winreg import (HKEY_LOCAL_MACHINE, KEY_READ, KEY_WRITE, REG_DWORD,
+                    OpenKey, CloseKey, CreateKeyEx, QueryValueEx, SetValueEx,
+                    DeleteValue)
 
 
 def interpolate(value, minimum, maximum):
@@ -97,13 +98,13 @@ if method == 'DDC/CI':
             contrast = [contrast[0], contrast[1], contrast[1]]
             monitors.append((monitor, brightness, contrast))
 
-    def destroy_monitors():
+    def restore_and_destroy_monitors():
         for monitor, brightness, contrast in monitors:
             set_monitor_brightness(monitor, brightness[2])
             set_monitor_contrast(monitor, contrast[2])
             destroy_physical_monitor(monitor)
 
-    atexit.register(destroy_monitors)
+    atexit.register(restore_and_destroy_monitors)
 
     set_brightness(monitors, 1.0)
     set_contrast(monitors, 1.0)
@@ -146,11 +147,11 @@ elif method == 'GAMMA':
 
     # device supports gamma ramp
 
-    def reset_gamma_ramp():
+    def restore_gamma_ramp():
         if gamma_ramp is not None:
             set_device_gamma_ramp(device, gamma_ramp)
 
-    atexit.register(reset_gamma_ramp)
+    atexit.register(restore_gamma_ramp)
 
     mat_monitorgamma = settings.get('mat_monitorgamma')
     mat_monitorgamma_tv_enabled = settings.get('mat_monitorgamma_tv_enabled')
@@ -171,40 +172,49 @@ elif method == 'GAMMA':
     try:
         test_gamma_ramp()
     except Exception as e:
-        def open_key(access):
-            return OpenKey(HKEY_LOCAL_MACHINE,
-                           r'SOFTWARE\Microsoft\Windows NT\CurrentVersion\ICM',
-                           access=access)
-
-        key = open_key(KEY_READ)
-        gamma_range = QueryValueEx(key, 'GdiIcmGammaRange')[0]
-        CloseKey(key)
-
         try:
+            icm = r'SOFTWARE\Microsoft\Windows NT\CurrentVersion\ICM'
+
+            try:
+                key = OpenKey(HKEY_LOCAL_MACHINE, icm, access=KEY_READ)
+            except FileNotFoundError:
+                key = CreateKeyEx(HKEY_LOCAL_MACHINE, icm, access=KEY_READ)
+
+            try:
+                gamma_range = QueryValueEx(key, 'GdiIcmGammaRange')[0]
+            except FileNotFoundError:
+                gamma_range = None
+
+            CloseKey(key)
+
             if gamma_range == 256:
                 # gamma range is already at maximum
                 raise e
 
             # set to gamma range to 256 and repeat test
 
-            try:
-                key = open_key(KEY_WRITE)
-            except PermissionError:
-                print('Gamma range is currently limited. Please restart with '
-                      'admin privileges in order to set it to maximum range!')
-                exit()
-
+            key = OpenKey(HKEY_LOCAL_MACHINE, icm, access=KEY_WRITE)
             SetValueEx(key, 'GdiIcmGammaRange', 0, REG_DWORD, 256)
             CloseKey(key)
 
-            def reset_gamma_range():
-                key = open_key(KEY_WRITE)
-                SetValueEx(key, 'GdiIcmGammaRange', 0, REG_DWORD, gamma_range)
+            def restore_gamma_range():
+                key = OpenKey(HKEY_LOCAL_MACHINE, icm, access=KEY_WRITE)
+
+                if gamma_range is None:
+                    DeleteValue(key, 'GdiIcmGammaRange')
+                else:
+                    SetValueEx(key, 'GdiIcmGammaRange', 0, REG_DWORD,
+                               gamma_range)
+
                 CloseKey(key)
 
-            atexit.register(reset_gamma_range)
+            atexit.register(restore_gamma_range)
 
             test_gamma_ramp()
+        except PermissionError:
+            print('Gamma range is currently limited. Please restart with '
+                  'admin privileges in order to set it to maximum range!')
+            exit()
         except:
             raise RuntimeError(
                 'Device does not support the full gamma range') from e
