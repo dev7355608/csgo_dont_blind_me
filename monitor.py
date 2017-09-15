@@ -139,12 +139,18 @@ def set_monitor_contrast(monitor, brightness):
 
 
 def get_dc():
-    return GetDC(HWND(None))
+    hdc = GetDC(HWND(None))
+
+    if not hdc:
+        raise RuntimeError('GetDC(HWND(NULL)) returned NULL')
+
+    return hdc
 
 
 def release_dc(device):
     if not ReleaseDC(HWND(None), device):
-        raise WinError()
+        raise RuntimeError(
+            'ReleaseDC(HWND(NULL), HDC({:#x})) returned 0'.format(device))
 
 
 def get_device_gamma_ramp(device):
