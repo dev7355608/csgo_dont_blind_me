@@ -10,6 +10,20 @@ from winreg import (HKEY_LOCAL_MACHINE, KEY_READ, KEY_WRITE, REG_DWORD,
                     DeleteValue)
 
 
+if getattr(sys, 'frozen', False):
+    application_path = os.path.dirname(sys.executable)
+
+    def press_any_key_to_exit():
+        try:
+            input('\nPress any key or CTRL+C to exit...\n')
+        except KeyboardInterrupt:
+            pass
+
+    atexit.register(press_any_key_to_exit)
+elif __file__:
+    application_path = os.path.dirname(__file__)
+
+
 def interpolate(value, minimum, maximum):
     return min(int(minimum + value * (maximum + 1 - minimum)), maximum)
 
@@ -61,11 +75,6 @@ def extract(data, *keys, default=None):
 
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
-
-if getattr(sys, 'frozen', False):
-    application_path = os.path.dirname(sys.executable)
-elif __file__:
-    application_path = os.path.dirname(__file__)
 
 with open(os.path.join(application_path, 'settings.json')) as f:
     settings = json.load(f)
