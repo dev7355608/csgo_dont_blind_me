@@ -214,7 +214,7 @@ elif method == 'GAMMA':
         except PermissionError:
             print('Gamma range is currently limited. Please restart with '
                   'admin privileges in order to set it to maximum range!')
-            exit()
+            sys.exit()
         except:
             raise RuntimeError(
                 'Device does not support the full gamma range') from e
