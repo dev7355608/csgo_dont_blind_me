@@ -145,11 +145,8 @@ elif method == 'GAMMA':
     try:
         gamma_ramp = get_device_gamma_ramp(device)
         set_device_gamma_ramp(device, gamma_ramp)
-        # device supports gamma ramp
     except Exception as e:
-        # device does not support gamma ramp
-        print('Error: Device does not support gamma ramp!')
-        sys.exit()
+        raise RuntimeError('Device does not support gamma ramp') from e
 
     def restore_gamma_ramp():
         set_device_gamma_ramp(device, gamma_ramp)
