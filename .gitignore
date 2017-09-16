@@ -1,3 +1,7 @@
+/settings.json
+/gamestate_integration_*.cfg
+/*_gamma_range.reg
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
