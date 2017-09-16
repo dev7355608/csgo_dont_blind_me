@@ -3,8 +3,9 @@ import json
 import logging
 import os
 import sys
+from ddc_ci import *
 from flask import Flask, request
-from monitor import *
+from gamma import Context as GammaContext
 from winreg import (HKEY_LOCAL_MACHINE, OpenKey, CloseKey, QueryValueEx)
 
 
@@ -54,13 +55,12 @@ def set_contrast(monitors, value):
     return changed
 
 
-def set_gamma_ramp(device, gamma, brightness=1.0, remap=(0, 255)):
-    def f(x):
-        y = pow(x / 256 * brightness, 1 / gamma)
-        return int(256 * (remap[0] + y * (remap[1] + 1 - remap[0])))
+def set_gamma_ramp(context, gamma, brightness=1.0, remap=(0, 255)):
+    def func(x):
+        y = pow(x * brightness, 1 / gamma)
+        return (remap[0] + y * (remap[1] + 1 - remap[0])) / 256
 
-    ramp = [[f(c) for c in range(256)] for i in range(3)]
-    set_device_gamma_ramp(device, ramp)
+    context.set(func)
 
 
 def extract(data, *keys, default=None):
@@ -135,23 +135,17 @@ if method == 'DDC/CI':
 
         return ''
 elif method == 'GAMMA':
-    device = get_dc()
+    context = GammaContext()
 
-    def release_device():
-        release_dc(device)
+    def restore_gamma_context():
+        try:
+            context.restore()
+        finally:
+            context.destroy()
 
-    atexit.register(release_device)
+    atexit.register(restore_gamma_context)
 
-    try:
-        gamma_ramp = get_device_gamma_ramp(device)
-        set_device_gamma_ramp(device, gamma_ramp)
-    except Exception as e:
-        raise RuntimeError('Device does not support gamma ramp') from e
-
-    def restore_gamma_ramp():
-        set_device_gamma_ramp(device, gamma_ramp)
-
-    atexit.register(restore_gamma_ramp)
+    context.save()
 
     mat_monitorgamma = settings.get('mat_monitorgamma')
     mat_monitorgamma_tv_enabled = settings.get('mat_monitorgamma_tv_enabled')
@@ -164,11 +158,10 @@ elif method == 'GAMMA':
         remap = (0, 255)
 
     try:
-        set_gamma_ramp(device, gamma, 0.0, remap)
-        set_gamma_ramp(device, gamma, 1.0, remap)
+        set_gamma_ramp(context, gamma, 0.0, remap)
+        set_gamma_ramp(context, gamma, 1.0, remap)
     except Exception as e:
         icm = r'SOFTWARE\Microsoft\Windows NT\CurrentVersion\ICM'
-
         key = None
 
         try:
@@ -202,7 +195,7 @@ elif method == 'GAMMA':
 
         sys.exit()
 
-    set_gamma_ramp(device, gamma, 1.0, remap)
+    set_gamma_ramp(context, gamma, 1.0, remap)
 
     @app.route('/', methods=['POST'])
     def main():
@@ -212,9 +205,9 @@ elif method == 'GAMMA':
                      default=f1)
 
         if f0 < f1:
-            set_gamma_ramp(device, gamma, 0.0, remap)
+            set_gamma_ramp(context, gamma, 0.0, remap)
         elif f0 > f1:
-            set_gamma_ramp(device, gamma, 1.0 - f1 / 255, remap)
+            set_gamma_ramp(context, gamma, 1.0 - f1 / 255, remap)
 
         return ''
 

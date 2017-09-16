@@ -1,27 +1,20 @@
 from ctypes import windll
 from ctypes import sizeof, byref, Structure, WinError
 from ctypes import POINTER, WINFUNCTYPE
-from ctypes.wintypes import (BOOL, DWORD, HANDLE, HDC, HMONITOR, HWND, LPARAM,
-                             RECT, WCHAR, WORD)
+from ctypes.wintypes import (BOOL, DWORD, HANDLE, HDC, HMONITOR, LPARAM, RECT,
+                             WCHAR)
 
 __all__ = ['enum_display_monitors', 'get_physical_monitors',
            'destroy_physical_monitor', 'destroy_physical_monitors',
            'get_monitor_brightness', 'set_monitor_brightness',
-           'get_monitor_contrast', 'set_monitor_contrast',
-           'get_dc', 'release_dc', 'get_device_gamma_ramp',
-           'set_device_gamma_ramp']
+           'get_monitor_contrast', 'set_monitor_contrast']
 
 MONITORENUMPROC = WINFUNCTYPE(BOOL, HMONITOR, HDC, POINTER(RECT), LPARAM)
 PHYSICAL_MONITOR_DESCRIPTION_SIZE = 128
 MONITORINFOF_PRIMARY = 1
 
-COLORMGMTCAPS = 121
-CM_GAMMA_RAMP = 2
-
 EnumDisplayMonitors = windll.user32.EnumDisplayMonitors
 GetMonitorInfo = windll.user32.GetMonitorInfoW
-GetDC = windll.user32.GetDC
-ReleaseDC = windll.user32.ReleaseDC
 GetNumberOfPhysicalMonitorsFromHMONITOR = \
     windll.dxva2.GetNumberOfPhysicalMonitorsFromHMONITOR
 GetPhysicalMonitorsFromHMONITOR = windll.dxva2.GetPhysicalMonitorsFromHMONITOR
@@ -30,9 +23,6 @@ GetMonitorBrightness = windll.dxva2.GetMonitorBrightness
 SetMonitorBrightness = windll.dxva2.SetMonitorBrightness
 GetMonitorContrast = windll.dxva2.GetMonitorContrast
 SetMonitorContrast = windll.dxva2.SetMonitorContrast
-GetDeviceCaps = windll.gdi32.GetDeviceCaps
-GetDeviceGammaRamp = windll.gdi32.GetDeviceGammaRamp
-SetDeviceGammaRamp = windll.gdi32.SetDeviceGammaRamp
 
 
 class PHYSICAL_MONITOR(Structure):
@@ -136,48 +126,4 @@ def get_monitor_contrast(monitor):
 
 def set_monitor_contrast(monitor, brightness):
     if not SetMonitorContrast(monitor, DWORD(brightness)):
-        raise WinError()
-
-
-def get_dc():
-    hdc = GetDC(HWND(None))
-
-    if not hdc:
-        raise RuntimeError('GetDC(HWND(NULL)) returned NULL')
-
-    return hdc
-
-
-def release_dc(device):
-    if not ReleaseDC(HWND(None), device):
-        raise RuntimeError(
-            'ReleaseDC(HWND(NULL), HDC({:#x})) returned 0'.format(device))
-
-
-def get_device_gamma_ramp(device):
-    ramp = (WORD * 256 * 3)()
-
-    if not GetDeviceGammaRamp(device, byref(ramp)):
-        if not GetDeviceCaps(device, COLORMGMTCAPS) & CM_GAMMA_RAMP:
-            raise RuntimeError(
-                'Device [{:#x}] does not support GetDeviceGammaRamp'.format(
-                    device)) from WinError()
-        raise WinError()
-
-    return [[int(ramp[i][j]) for j in range(256)]
-            for i in range(3)]
-
-
-def set_device_gamma_ramp(device, ramp):
-    _ramp = (WORD * 256 * 3)()
-
-    for i in range(3):
-        for j in range(256):
-            _ramp[i][j] = WORD(ramp[i][j])
-
-    if not SetDeviceGammaRamp(device, byref(_ramp)):
-        if not GetDeviceCaps(device, COLORMGMTCAPS) & CM_GAMMA_RAMP:
-            raise RuntimeError(
-                'Device [{:#x}] does not support SetDeviceGammaRamp'.format(
-                    device)) from WinError()
         raise WinError()
