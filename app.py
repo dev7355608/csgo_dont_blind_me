@@ -6,8 +6,7 @@ import sys
 from flask import Flask, request
 from monitor import *
 from winreg import (HKEY_LOCAL_MACHINE, KEY_READ, KEY_WRITE, REG_DWORD,
-                    OpenKey, CloseKey, CreateKeyEx, QueryValueEx, SetValueEx,
-                    DeleteValue)
+                    OpenKey, CloseKey, CreateKeyEx, QueryValueEx, SetValueEx)
 
 
 if getattr(sys, 'frozen', False):
@@ -144,21 +143,17 @@ elif method == 'GAMMA':
 
     atexit.register(release_device)
 
-    # test if gamma ramp is supported
-
     try:
         gamma_ramp = get_device_gamma_ramp(device)
         set_device_gamma_ramp(device, gamma_ramp)
+        # device supports gamma ramp
     except Exception as e:
         # device does not support gamma ramp
-        gamma_ramp = None
-        raise e
-
-    # device supports gamma ramp
+        print('Error: Device does not support gamma ramp!')
+        sys.exit()
 
     def restore_gamma_ramp():
-        if gamma_ramp is not None:
-            set_device_gamma_ramp(device, gamma_ramp)
+        set_device_gamma_ramp(device, gamma_ramp)
 
     atexit.register(restore_gamma_ramp)
 
@@ -172,8 +167,6 @@ elif method == 'GAMMA':
         gamma = 2.2 / mat_monitorgamma
         remap = (0, 255)
 
-    # now test if the device supports the full gamma range that is required
-
     def test_gamma_ramp():
         set_gamma_ramp(device, gamma, 0.0, remap)
         set_gamma_ramp(device, gamma, 1.0, remap)
@@ -181,8 +174,10 @@ elif method == 'GAMMA':
     try:
         test_gamma_ramp()
     except Exception as e:
+        icm = r'SOFTWARE\Microsoft\Windows NT\CurrentVersion\ICM'
+
         try:
-            icm = r'SOFTWARE\Microsoft\Windows NT\CurrentVersion\ICM'
+            key = None
 
             try:
                 key = OpenKey(HKEY_LOCAL_MACHINE, icm, access=KEY_READ)
@@ -193,42 +188,43 @@ elif method == 'GAMMA':
                 gamma_range = QueryValueEx(key, 'GdiIcmGammaRange')[0]
             except FileNotFoundError:
                 gamma_range = None
-
-            CloseKey(key)
-
-            if gamma_range == 256:
-                # gamma range is already at maximum
-                raise e
-
-            # set to gamma range to 256 and repeat test
-
-            key = OpenKey(HKEY_LOCAL_MACHINE, icm, access=KEY_WRITE)
-            SetValueEx(key, 'GdiIcmGammaRange', 0, REG_DWORD, 256)
-            CloseKey(key)
-
-            def restore_gamma_range():
-                key = OpenKey(HKEY_LOCAL_MACHINE, icm, access=KEY_WRITE)
-
-                if gamma_range is None:
-                    DeleteValue(key, 'GdiIcmGammaRange')
-                else:
-                    SetValueEx(key, 'GdiIcmGammaRange', 0, REG_DWORD,
-                               gamma_range)
-
+        finally:
+            if key is not None:
                 CloseKey(key)
 
-            atexit.register(restore_gamma_range)
-
-            test_gamma_ramp()
-        except PermissionError:
-            print('Gamma range is currently limited. Please restart with '
-                  'admin privileges in order to set it to maximum range!')
+        if gamma_range == 256:
+            print('Error: Device does not support the full gamma range! '
+                  '(or you haven\'t rebooted yet)')
             sys.exit()
-        except:
-            raise RuntimeError(
-                'Device does not support the full gamma range') from e
 
-    # device supports full range gamma ramp
+        restore_gamma_ramp = os.path.join(application_path,
+                                          'restore_gamma_range.reg')
+
+        with open(restore_gamma_ramp, mode='w') as f:
+            f.write('Windows Registry Editor Version 5.00\n\n')
+            f.write('[{}]\n'.format(icm))
+            f.write('"GdiIcmGammaRange"=')
+
+            if gamma is None:
+                f.write('-')
+            else:
+                f.write('dword:{:08x}'.format(gamma_range))
+
+        try:
+            key = None
+            key = OpenKey(HKEY_LOCAL_MACHINE, icm, access=KEY_WRITE)
+            SetValueEx(key, 'GdiIcmGammaRange', 0, REG_DWORD, 256)
+
+            print('Gamma range is has been set to maximum. '
+                  'Reboot PC for it to take effect!')
+            sys.exit()
+        except PermissionError:
+            print('Gamma range is currently limited. Please restart app as '
+                  'administrator in order to set it to maximum range!')
+            sys.exit()
+        finally:
+            if key is not None:
+                CloseKey(key)
 
     set_gamma_ramp(device, gamma, 1.0, remap)
 
