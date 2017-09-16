@@ -2,5 +2,8 @@
   "port": 54237,
   "method": "gamma",
   "mat_monitorgamma": 2,
-  "mat_monitorgamma_tv_enabled": 0
+  "mat_monitorgamma_tv_enabled": 0,
+  "default_path_windows": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Counter-Strike Global Offensive\\csgo\\cfg",
+  "default_path_linux": "~/.steam/steam/steamapps/common/Counter-Strike Global Offensive/csgo/cfg",
+  "config_file_name": "gamestate_integration_dont_blind_me.cfg"
 }
