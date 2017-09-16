@@ -3,11 +3,13 @@ import json
 import logging
 import os
 import sys
-from flask import Flask, request
-from monitor import *
 from winreg import (HKEY_LOCAL_MACHINE, KEY_READ, KEY_WRITE, REG_DWORD,
                     OpenKey, CloseKey, CreateKeyEx, QueryValueEx, SetValueEx)
 
+from flask import Flask, request
+
+from file_copier import copy_config_or_print_message
+from monitor import *
 
 if getattr(sys, 'frozen', False):
     application_path = os.path.dirname(sys.executable)
@@ -80,10 +82,7 @@ with open(os.path.join(application_path, 'settings.json')) as f:
 
 app = Flask(__name__)
 
-print('''Don't forget to copy gamestate_integration_dont_blind_me.cfg into
-    ...\\Steam\\userdata\\________\\730\\local\\cfg, or
-    ...\\Steam\\steamapps\\common\\Counter-Strike Global Offensive\\csgo\\cfg!
-''')
+copy_config_or_print_message(settings, application_path)
 
 print('All options are set in settings.json!\n')
 
