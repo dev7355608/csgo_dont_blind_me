@@ -248,6 +248,9 @@ elif method == 'GAMMA':
 '''.format(mat_monitorgamma, int(mat_monitorgamma_tv_enabled)))
 
     print('Don\'t forget to set the launch option -nogammaramp!\n')
+
+    print('Don\'t forget to disable f.lux!')
+    print('Don\'t forget to disable Windows Night Light!\n')
 else:
     raise ValueError('invalid method "{}"'.format(method))
 
