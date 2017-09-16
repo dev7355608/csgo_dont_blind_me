@@ -8,6 +8,6 @@ if _system == 'Windows':
 elif _system == 'Linux':
     raise NotImplementedError(_system)
 elif _system == 'Darwin':
-    raise NotImplementedError(_system)
+    from .gamma_quartz import Context
 else:
     raise NotImplementedError(_system)

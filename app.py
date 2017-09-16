@@ -2,11 +2,11 @@ import atexit
 import json
 import logging
 import os
+import platform
 import sys
 from ddc_ci import *
 from flask import Flask, request
 from gamma import Context as GammaContext
-from winreg import (HKEY_LOCAL_MACHINE, OpenKey, CloseKey, QueryValueEx)
 
 
 if getattr(sys, 'frozen', False):
@@ -79,12 +79,13 @@ with open(os.path.join(application_path, 'settings.json')) as f:
 
 app = Flask(__name__)
 
-print('''Don't forget to copy gamestate_integration_dont_blind_me.cfg into
-    ...\\Steam\\userdata\\________\\730\\local\\cfg, or
-    ...\\Steam\\steamapps\\common\\Counter-Strike Global Offensive\\csgo\\cfg!
-''')
+print('Please read the instructions carefully! '
+      'All options are set in settings.json.\n')
 
-print('All options are set in settings.json!\n')
+print("Don't forget to copy gamestate_integration_dont_blind_me.cfg into\n"
+      "    ...\\Steam\\userdata\\________\\730\\local\\cfg, or\n"
+      "    ...\\Steam\\steamapps\\common\\Counter-Strike Global Offensive\\"
+      "csgo\\cfg!\n")
 
 port = settings.get('port')
 method = settings.get('method').upper()
@@ -135,18 +136,6 @@ if method == 'DDC/CI':
 
         return ''
 elif method == 'GAMMA':
-    context = GammaContext()
-
-    def restore_gamma_context():
-        try:
-            context.restore()
-        finally:
-            context.destroy()
-
-    atexit.register(restore_gamma_context)
-
-    context.save()
-
     mat_monitorgamma = settings.get('mat_monitorgamma')
     mat_monitorgamma_tv_enabled = settings.get('mat_monitorgamma_tv_enabled')
 
@@ -157,10 +146,12 @@ elif method == 'GAMMA':
         gamma = 2.2 / mat_monitorgamma
         remap = (0, 255)
 
-    try:
-        set_gamma_ramp(context, gamma, 0.0, remap)
-        set_gamma_ramp(context, gamma, 1.0, remap)
-    except Exception as e:
+    context = GammaContext()
+
+    if platform.system() == 'Windows':
+        from winreg import (HKEY_LOCAL_MACHINE, OpenKey, CloseKey,
+                            QueryValueEx)
+
         icm = r'SOFTWARE\Microsoft\Windows NT\CurrentVersion\ICM'
         key = None
 
@@ -173,11 +164,7 @@ elif method == 'GAMMA':
             if key is not None:
                 CloseKey(key)
 
-        if gamma_range == 256:
-            print('Error: Device does not support the full gamma range!\n'
-                  '       (or you haven\'t rebooted yet after '
-                  'set_max_gamma_range.reg)')
-        else:
+        if gamma_range != 256:
             with open(os.path.join(application_path,
                                    'restore_gamma_range.reg'), mode='w') as f:
                 f.write('Windows Registry Editor Version 5.00\n\n')
@@ -189,11 +176,10 @@ elif method == 'GAMMA':
                 else:
                     f.write('dword:{:08x}'.format(gamma_range))
 
-            print('Gamma range is currently limited. '
-                  'Please run set_max_gamma_range.reg to remove the limit; '
-                  'then reboot PC for it to take effect!')
-
-        sys.exit()
+            print('Gamma range is currently limited. To fix that, please\n'
+                  '    (1) run set_max_gamma_range.reg, then\n'
+                  '    (2) reboot PC for it to take effect!')
+            sys.exit()
 
     set_gamma_ramp(context, gamma, 1.0, remap)
 
@@ -211,16 +197,16 @@ elif method == 'GAMMA':
 
         return ''
 
-    print('''Don't forget to set your preferred gamma! Currently set to:
-    mat_monitorgamma\t\t {:3.2f}
-    mat_monitorgamma_tv_enabled\t {}
-'''.format(mat_monitorgamma, int(mat_monitorgamma_tv_enabled)))
+    print("Don't forget to set your preferred gamma! Currently set to:\n"
+          "    mat_monitorgamma\t\t {:3.2f}\n"
+          "    mat_monitorgamma_tv_enabled\t {}\n".format(
+              mat_monitorgamma, int(mat_monitorgamma_tv_enabled)))
 
-    print('Don\'t forget to set the launch option -nogammaramp!\n')
+    print("Don't forget to set the launch option -nogammaramp!\n")
 
-    print('Don\'t forget to disable f.lux!')
-    print('Don\'t forget to disable Redshift!')
-    print('Don\'t forget to disable Windows Night Light!\n')
+    print("Don't forget to disable f.lux!")
+    print("Don't forget to disable Redshift!")
+    print("Don't forget to disable Windows Night Light!\n")
 else:
     raise ValueError('invalid method "{}"'.format(method))
 
