@@ -250,6 +250,7 @@ elif method == 'GAMMA':
     print('Don\'t forget to set the launch option -nogammaramp!\n')
 
     print('Don\'t forget to disable f.lux!')
+    print('Don\'t forget to disable Redshift!')
     print('Don\'t forget to disable Windows Night Light!\n')
 else:
     raise ValueError('invalid method "{}"'.format(method))
