@@ -205,7 +205,7 @@ elif method == 'GAMMA':
             f.write('[{}]\n'.format(icm))
             f.write('"GdiIcmGammaRange"=')
 
-            if gamma is None:
+            if gamma_range is None:
                 f.write('-')
             else:
                 f.write('dword:{:08x}'.format(gamma_range))
