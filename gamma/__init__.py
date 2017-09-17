@@ -6,7 +6,7 @@ _system = _platform.system()
 if _system == 'Windows':
     from .gamma_wingdi import Context
 elif _system == 'Linux':
-    raise NotImplementedError(_system)
+    from .gamma_vidmode import Context
 elif _system == 'Darwin':
     from .gamma_quartz import Context
 else:

@@ -1,4 +1,3 @@
-import atexit
 from ctypes import byref, c_float, c_uint32, cdll
 from ctypes.util import find_library
 
@@ -52,8 +51,6 @@ class Context:
         for i in range(display_count.value):
             self._displays.append(Display(display_ids[i]))
 
-        atexit.register(self.restore)
-
     def set(self, func):
         for display in self._displays:
             ramp_size = display.ramp_size
@@ -73,5 +70,5 @@ class Context:
                 raise RuntimeError(
                     '[CGError {}] Unable to set gamma ramp'.format(error))
 
-    def restore(self):
+    def close(self):
         CGDisplayRestoreColorSyncSettings()

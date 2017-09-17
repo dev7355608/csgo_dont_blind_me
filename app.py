@@ -85,6 +85,7 @@ print("Don't forget to set your preferred gamma in settings.json! "
           mat_monitorgamma, int(mat_monitorgamma_tv_enabled)))
 
 context = GammaContext()
+atexit.register(context.close)
 
 
 def set_brightness(brightness):

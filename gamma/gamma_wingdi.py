@@ -1,4 +1,3 @@
-import atexit
 from contextlib import contextmanager
 from ctypes import byref, windll, WinError
 from ctypes.wintypes import WORD
@@ -45,8 +44,6 @@ class Context:
                 raise RuntimeError('Unable to save current gamma '
                                    'ramp') from WinError()
 
-            atexit.register(self.restore)
-
     def set(self, func):
         ramp = (WORD * 256 * 3)()
 
@@ -58,7 +55,7 @@ class Context:
             if not SetDeviceGammaRamp(hdc, byref(ramp)):
                 raise RuntimeError('Unable to set gamma ramp') from WinError()
 
-    def restore(self):
+    def close(self):
         with get_dc() as hdc:
             if not SetDeviceGammaRamp(hdc, byref(self._saved_ramp)):
                 raise RuntimeError('Unable to restore gamma '
