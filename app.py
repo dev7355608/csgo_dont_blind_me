@@ -1,10 +1,9 @@
 import atexit
 import json
-import logging
 import os
 import platform
 import sys
-from flask import Flask, request
+from aiohttp import web
 from gamma import Context as GammaContext
 
 
@@ -84,17 +83,6 @@ print("Don't forget to set your preferred gamma in settings.json! "
       "    mat_monitorgamma_tv_enabled\t {}\n".format(
           mat_monitorgamma, int(mat_monitorgamma_tv_enabled)))
 
-context = GammaContext()
-atexit.register(context.close)
-
-
-def set_brightness(brightness):
-    def func(x):
-        y = pow(x * brightness, 1 / gamma)
-        return (remap[0] + y * (remap[1] + 1 - remap[0])) / 256
-
-    context.set(func)
-
 
 if platform.system() == 'Windows':
     from winreg import (HKEY_LOCAL_MACHINE, OpenKey, CloseKey,
@@ -142,30 +130,31 @@ print("Don't forget to disable f.lux!")
 print("Don't forget to disable Redshift!")
 print("Don't forget to disable Windows Night Light!\n")
 
-set_brightness(1.0)
 
-log = logging.getLogger('werkzeug')
-log.setLevel(logging.ERROR)
+def set_brightness(brightness):
+    def func(x):
+        y = pow(x * brightness, 1 / gamma)
+        return (remap[0] + y * (remap[1] + 1 - remap[0])) / 256
 
-app = Flask(__name__)
+    context.set(func)
 
 
-@app.route('/', methods=['POST'])
-def main():
-    data = request.json
+async def handle(request):
+    data = await request.json()
     f1 = extract(data, 'player', 'state', 'flashed', default=0)
     f0 = extract(data, 'previously', 'player', 'state', 'flashed',
                  default=f1)
 
-    if f0 < f1:
-        set_brightness(0.0)
-    elif f0 > f1:
+    if f0 != f1:
         set_brightness(1.0 - f1 / 255)
 
-    return ''
+    return web.Response()
 
 
-print('Running on http://127.0.0.1:{}/ (Press CTRL+C to quit)'.format(port))
+context = GammaContext()
+atexit.register(context.close)
+set_brightness(1.0)
 
-if __name__ == '__main__':
-    app.run(port=port)
+app = web.Application()
+app.router.add_post('/', handle)
+web.run_app(app, host='127.0.0.1', port=port)
