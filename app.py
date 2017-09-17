@@ -71,10 +71,10 @@ mat_monitorgamma = settings.get('mat_monitorgamma')
 mat_monitorgamma_tv_enabled = settings.get('mat_monitorgamma_tv_enabled')
 
 if mat_monitorgamma_tv_enabled:
-    gamma = 2.5 / mat_monitorgamma
+    gamma = mat_monitorgamma / 2.5
     remap = (16, 235)
 else:
-    gamma = 2.2 / mat_monitorgamma
+    gamma = mat_monitorgamma / 2.2
     remap = (0, 255)
 
 print("Don't forget to set your preferred gamma in settings.json! "
@@ -131,29 +131,32 @@ print("Don't forget to disable Redshift!")
 print("Don't forget to disable Windows Night Light!\n")
 
 
-def set_brightness(brightness):
+def adjust_brightness(flashed):
     def func(x):
-        y = pow(x * brightness, 1 / gamma)
-        return (remap[0] + y * (remap[1] + 1 - remap[0])) / 256
+        y = x - flashed / 255
+
+        if y <= 0:
+            return 0
+
+        return (remap[0] + pow(y, gamma) * (remap[1] + 1 - remap[0])) / 256
 
     context.set(func)
 
 
 async def handle(request):
     data = await request.json()
-    f1 = extract(data, 'player', 'state', 'flashed', default=0)
-    f0 = extract(data, 'previously', 'player', 'state', 'flashed',
-                 default=f1)
+    flashed = extract(data, 'player', 'state', 'flashed', default=0)
 
-    if f0 != f1:
-        set_brightness(1.0 - f1 / 255)
+    if flashed != extract(data, 'previously', 'player', 'state', 'flashed',
+                          default=flashed):
+        adjust_brightness(flashed)
 
     return web.Response()
 
 
 context = GammaContext()
 atexit.register(context.close)
-set_brightness(1.0)
+adjust_brightness(flashed=0)
 
 app = web.Application()
 app.router.add_post('/', handle)
