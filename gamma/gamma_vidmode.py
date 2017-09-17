@@ -43,6 +43,7 @@ class Context:
             raise RuntimeError('X request failed: XF86VidModeGetGammaRampSize')
 
         ramp_size = ramp_size.value
+        self._ramp_size = ramp_size
 
         if ramp_size == 0:
             XCloseDisplay(display)
@@ -69,7 +70,8 @@ class Context:
         ramp = (c_uint16 * ramp_size * 3)()
 
         for i in range(ramp_size):
-            ramp[0][i] = ramp[1][i] = ramp[2][i] = func(i / ramp_size)
+            ramp[0][i] = ramp[1][i] = ramp[2][i] = \
+                int(65535 * func(i / ramp_size))
 
         gamma_r = byref(ramp, 0 * ramp_size)
         gamma_g = byref(ramp, 1 * ramp_size)
