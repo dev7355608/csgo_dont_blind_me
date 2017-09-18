@@ -20,7 +20,7 @@ XOpenDisplay.restype = c_void_p
 
 class Context:
     def __init__(self):
-        display = XOpenDisplay(None)
+        display = c_void_p(XOpenDisplay(None))
 
         if not display:
             raise RuntimeError('X request failed: XOpenDisplay')
