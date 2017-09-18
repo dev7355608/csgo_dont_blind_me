@@ -10,13 +10,31 @@ from gamma import Context as GammaContext
 if getattr(sys, 'frozen', False):
     application_path = os.path.dirname(sys.executable)
 
-    def press_any_key_to_exit():
-        try:
-            input('\nPress any key or CTRL+C to exit...\n')
-        except KeyboardInterrupt:
-            pass
+    class Excepthook:
+        def __init__(self, excepthook):
+            self.exception = False
+            self.excepthook = excepthook
 
-    atexit.register(press_any_key_to_exit)
+        def __call__(self, type, value, traceback):
+            self.exception = True
+            self.excepthook(type, value, traceback)
+
+    excepthook = Excepthook(sys.excepthook)
+    sys.excepthook = excepthook
+
+    def exit_handler():
+        if excepthook.exception:
+            print('\n\nPress CTRL+C to quit...\n')
+
+            try:
+                from time import sleep
+
+                while True:
+                    sleep(1)
+            except KeyboardInterrupt:
+                pass
+
+    atexit.register(exit_handler)
 elif __file__:
     application_path = os.path.dirname(__file__)
 
