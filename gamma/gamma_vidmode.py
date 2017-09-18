@@ -1,4 +1,4 @@
-from ctypes import byref, c_int, c_uint16, cdll
+from ctypes import byref, c_int, c_uint16, c_void_p, cdll
 from ctypes.util import find_library
 
 
@@ -14,6 +14,8 @@ XF86VidModeQueryVersion = Xxf86vm.XF86VidModeQueryVersion
 XF86VidModeGetGammaRampSize = Xxf86vm.XF86VidModeGetGammaRampSize
 XF86VidModeGetGammaRamp = Xxf86vm.XF86VidModeGetGammaRamp
 XF86VidModeSetGammaRamp = Xxf86vm.XF86VidModeSetGammaRamp
+
+XOpenDisplay.restype = c_void_p
 
 
 class Context:
