@@ -1,4 +1,4 @@
-from ctypes import byref, c_float, c_uint32, cdll
+from ctypes import byref, sizeof, c_float, c_uint32, cdll
 from ctypes.util import find_library
 
 
@@ -61,9 +61,9 @@ class Context:
             for i in range(ramp_size):
                 ramp[0][i] = ramp[1][i] = ramp[2][i] = func(i / ramp_size)
 
-            gamma_r = byref(ramp, 0 * ramp_size)
-            gamma_g = byref(ramp, 1 * ramp_size)
-            gamma_b = byref(ramp, 2 * ramp_size)
+            gamma_r = byref(ramp, 0 * ramp_size * sizeof(c_float))
+            gamma_g = byref(ramp, 1 * ramp_size * sizeof(c_float))
+            gamma_b = byref(ramp, 2 * ramp_size * sizeof(c_float))
 
             error = CGSetDisplayTransferByTable(display.id, display.ramp_size,
                                                 gamma_r, gamma_g, gamma_b)
