@@ -8,8 +8,6 @@ from gamma import Context as GammaContext
 
 
 if getattr(sys, 'frozen', False):
-    application_path = os.path.dirname(sys.executable)
-
     class Excepthook:
         def __init__(self, excepthook):
             self.exception = False
@@ -35,8 +33,27 @@ if getattr(sys, 'frozen', False):
                 pass
 
     atexit.register(exit_handler)
-elif __file__:
-    application_path = os.path.dirname(__file__)
+
+if platform.system() == 'Windows':
+    import win32console, win32gui, win32con
+
+    hwnd = win32console.GetConsoleWindow()
+
+    if hwnd:
+        hMenu = win32gui.GetSystemMenu(hwnd, False)
+
+        if hMenu:
+            win32gui.EnableMenuItem(hMenu, win32con.SC_CLOSE,
+                                    win32con.MF_BYCOMMAND |
+                                    win32con.MF_DISABLED |
+                                    win32con.MF_GRAYED)
+
+            def restore_close_button():
+                win32gui.EnableMenuItem(hMenu, win32con.SC_CLOSE,
+                                        win32con.MF_BYCOMMAND |
+                                        win32con.MF_ENABLED)
+
+            atexit.register(restore_close_button)
 
 
 def extract(data, *keys, default=None):
@@ -46,6 +63,11 @@ def extract(data, *keys, default=None):
         data = data[key]
     return data
 
+
+if getattr(sys, 'frozen', False):
+    application_path = os.path.dirname(sys.executable)
+elif __file__:
+    application_path = os.path.dirname(__file__)
 
 print('Please read the instructions carefully!\n')
 
