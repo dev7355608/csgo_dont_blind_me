@@ -1,9 +1,11 @@
 from contextlib import contextmanager
-from ctypes import byref, windll, WinError
-from ctypes.wintypes import WORD
+from ctypes import byref, sizeof, windll, WinError
+from ctypes.wintypes import WORD, HDC
 
 
 __all__ = ['Context']
+
+WORD_MAX = pow(2, sizeof(WORD) * 8) - 1
 
 COLORMGMTCAPS = 121
 CM_GAMMA_RAMP = 2
@@ -14,10 +16,12 @@ GetDeviceCaps = windll.gdi32.GetDeviceCaps
 GetDeviceGammaRamp = windll.gdi32.GetDeviceGammaRamp
 SetDeviceGammaRamp = windll.gdi32.SetDeviceGammaRamp
 
+GetDC.restype = HDC
+
 
 @contextmanager
 def get_dc():
-    hdc = GetDC(None)
+    hdc = HDC(GetDC(None))
 
     if not hdc:
         raise RuntimeError('Unable to open device context')
@@ -49,7 +53,7 @@ class Context:
 
         for i in range(256):
             ramp[0][i] = ramp[1][i] = ramp[2][i] = \
-                int(65535 * func(i / 256))
+                int(WORD_MAX * func(i / 256))
 
         with get_dc() as hdc:
             if not SetDeviceGammaRamp(hdc, byref(ramp)):

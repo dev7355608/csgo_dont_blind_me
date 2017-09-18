@@ -1,8 +1,10 @@
-from ctypes import byref, c_int, c_uint16, c_void_p, cdll
+from ctypes import byref, c_int, c_ushort, c_void_p, sizeof, cdll
 from ctypes.util import find_library
 
 
 __all__ = ['Context']
+
+C_USHORT_MAX = pow(2, sizeof(c_ushort) * 8) - 1
 
 X11 = cdll.LoadLibrary(find_library('X11'))
 Xxf86vm = cdll.LoadLibrary(find_library('Xxf86vm'))
@@ -51,7 +53,7 @@ class Context:
             XCloseDisplay(display)
             raise RuntimeError('Gamma ramp size is zero')
 
-        ramp = (c_uint16 * ramp_size * 3)()
+        ramp = (c_ushort * ramp_size * 3)()
 
         gamma_r = byref(ramp, 0 * ramp_size)
         gamma_g = byref(ramp, 1 * ramp_size)
@@ -69,11 +71,11 @@ class Context:
         screen_num = self._screen_num
 
         ramp_size = self._ramp_size
-        ramp = (c_uint16 * ramp_size * 3)()
+        ramp = (c_ushort * ramp_size * 3)()
 
         for i in range(ramp_size):
             ramp[0][i] = ramp[1][i] = ramp[2][i] = \
-                int(65535 * func(i / ramp_size))
+                int(C_USHORT_MAX * func(i / ramp_size))
 
         gamma_r = byref(ramp, 0 * ramp_size)
         gamma_g = byref(ramp, 1 * ramp_size)

@@ -15,11 +15,13 @@ CGDisplayGammaTableCapacity = lib.CGDisplayGammaTableCapacity
 CGSetDisplayTransferByTable = lib.CGSetDisplayTransferByTable
 CGDisplayRestoreColorSyncSettings = lib.CGDisplayRestoreColorSyncSettings
 
+CGDisplayGammaTableCapacity.restype = c_uint32
+
 
 class Display:
     def __init__(self, id):
         self.id = id
-        self.ramp_size = CGDisplayGammaTableCapacity(id)
+        self.ramp_size = c_uint32(CGDisplayGammaTableCapacity(id))
 
         if self.ramp_size == 0:
             raise RuntimeError('Gamma ramp size is zero')
@@ -31,7 +33,7 @@ class Context:
     def __init__(self):
         display_count = c_uint32()
 
-        error = CGGetOnlineDisplayList(0, None, byref(display_count))
+        error = CGGetOnlineDisplayList(c_uint32(0), None, byref(display_count))
 
         if error != kCGErrorSuccess:
             raise RuntimeError(
@@ -49,11 +51,11 @@ class Context:
         self._displays = []
 
         for i in range(display_count.value):
-            self._displays.append(Display(display_ids[i]))
+            self._displays.append(Display(CGDirectDisplayID(display_ids[i])))
 
     def set(self, func):
         for display in self._displays:
-            ramp_size = display.ramp_size
+            ramp_size = display.ramp_size.value
             ramp = (c_float * ramp_size * 3)()
 
             for i in range(ramp_size):
@@ -63,7 +65,7 @@ class Context:
             gamma_g = byref(ramp, 1 * ramp_size)
             gamma_b = byref(ramp, 2 * ramp_size)
 
-            error = CGSetDisplayTransferByTable(display.id, ramp_size,
+            error = CGSetDisplayTransferByTable(display.id, display.ramp_size,
                                                 gamma_r, gamma_g, gamma_b)
 
             if error != kCGErrorSuccess:
