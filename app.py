@@ -172,13 +172,23 @@ print("Don't forget to disable Windows Night Light!\n")
 
 
 def adjust_brightness(flashed):
-    def func(x):
-        y = x - flashed / 255
+    a = remap[0] / 256
+    b = (remap[1] + 1 - remap[0]) / 256
 
-        if y <= 0:
-            return 0
+    if flashed == 0:
+        def func(x):
+            return a + pow(x, gamma) * b
+    elif flashed == 255:
+        def func(x):
+            return a
+    else:
+        c = flashed / 255
+        d = pow(c, 2.2)
+        s = (1 - c) / (1 - d)
+        g = gamma / 2.2
 
-        return (remap[0] + pow(y, gamma) * (remap[1] + 1 - remap[0])) / 256
+        def func(x):
+            return a + pow(max(pow(x, 2.2) - d, 0) * s, g) * b
 
     context.set(func)
 
