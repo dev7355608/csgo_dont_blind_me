@@ -34,6 +34,12 @@ if getattr(sys, 'frozen', False):
 
     atexit.register(exit_handler)
 
+    def exit(*args, **kwargs):
+        excepthook.exception = True
+        sys.exit(*args, **kwargs)
+else:
+    exit = sys.exit
+
 if platform.system() == 'Windows':
     import win32console, win32gui, win32con
 
@@ -161,7 +167,7 @@ if platform.system() == 'Windows':
         print('Gamma range is currently limited. To fix that, please\n'
               '    (1) run set_max_gamma_range.reg, then\n'
               '    (2) reboot PC for it to take effect!')
-        sys.exit()
+        exit()
 
 
 print("Don't forget to set the launch option -nogammaramp!\n")
