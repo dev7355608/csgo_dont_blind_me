@@ -150,7 +150,7 @@ if platform.system() == 'Windows':
         with open(os.path.join(application_path,
                                'restore_gamma_range.reg'), mode='w') as f:
             f.write('Windows Registry Editor Version 5.00\n\n')
-            f.write('[{}]\n'.format(icm))
+            f.write('[HKEY_LOCAL_MACHINE\{}]\n'.format(icm))
             f.write('"GdiIcmGammaRange"=')
 
             if gamma_range is None:
@@ -161,7 +161,7 @@ if platform.system() == 'Windows':
         with open(os.path.join(application_path,
                                'set_max_gamma_range.reg'), mode='w') as f:
             f.write('Windows Registry Editor Version 5.00\n\n')
-            f.write('[{}]\n'.format(icm))
+            f.write('[HKEY_LOCAL_MACHINE\{}]\n'.format(icm))
             f.write('"GdiIcmGammaRange"=dword:{:08x}'.format(256))
 
         print('Gamma range is currently limited. To fix that, please\n'
