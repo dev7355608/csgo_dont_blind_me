@@ -1,15 +1,26 @@
 from contextlib import contextmanager
-from ctypes import byref, sizeof, windll, WinError
-from ctypes.wintypes import WORD, HDC
+from ctypes import byref, sizeof, Structure, windll, WinError
+from ctypes import POINTER, WINFUNCTYPE
+from ctypes.wintypes import (BOOL, DWORD, HANDLE, HDC, HMONITOR, LPARAM, RECT,
+                             WCHAR, WORD)
+from queue import Queue
+from threading import Thread
 
 
 __all__ = ['Context']
+
+MONITORENUMPROC = WINFUNCTYPE(BOOL, HMONITOR, HDC, POINTER(RECT), LPARAM)
+PHYSICAL_MONITOR_DESCRIPTION_SIZE = 128
+MONITORINFOF_PRIMARY = 1
 
 WORD_MAX = pow(2, sizeof(WORD) * 8) - 1
 
 COLORMGMTCAPS = 121
 CM_GAMMA_RAMP = 2
 
+
+EnumDisplayMonitors = windll.user32.EnumDisplayMonitors
+GetMonitorInfo = windll.user32.GetMonitorInfoW
 GetDC = windll.user32.GetDC
 ReleaseDC = windll.user32.ReleaseDC
 GetDeviceCaps = windll.gdi32.GetDeviceCaps
@@ -17,6 +28,19 @@ GetDeviceGammaRamp = windll.gdi32.GetDeviceGammaRamp
 SetDeviceGammaRamp = windll.gdi32.SetDeviceGammaRamp
 
 GetDC.restype = HDC
+
+
+class PHYSICAL_MONITOR(Structure):
+    _fields_ = [('hPhysicalMonitor', HANDLE),
+                ('szPhysicalMonitorDescription',
+                 WCHAR * PHYSICAL_MONITOR_DESCRIPTION_SIZE)]
+
+
+class MONITORINFO(Structure):
+    _fields_ = [('cbSize', DWORD),
+                ('rcMonitor', RECT),
+                ('rcWork', RECT),
+                ('dwFlags', DWORD)]
 
 
 @contextmanager
@@ -27,7 +51,39 @@ def get_dc():
         raise RuntimeError('Unable to open device context')
 
     try:
-        yield hdc
+        queue = Queue()
+
+        def callback(hMonitor, hdcMonitor, lprcMonitor, dwData):
+            mi = MONITORINFO()
+            mi.cbSize = sizeof(mi)
+
+            if not GetMonitorInfo(hMonitor, byref(mi)):
+                raise WinError()
+
+            if mi.dwFlags & MONITORINFOF_PRIMARY:
+                queue.put(HDC(hdcMonitor))
+                queue.join()
+
+            return True
+
+        def worker():
+            if not EnumDisplayMonitors(hdc, None, MONITORENUMPROC(callback),
+                                       None):
+                raise WinError()
+
+            queue.put(None)
+
+        thread = Thread(target=worker)
+        thread.start()
+
+        yield queue.get()
+        queue.task_done()
+
+        while queue.get() is not None:
+            queue.task_done()
+
+        queue.task_done()
+        thread.join()
     finally:
         if not ReleaseDC(None, hdc):
             raise RuntimeError('Unable to release device context')
