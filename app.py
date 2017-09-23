@@ -4,6 +4,7 @@ import os
 import platform
 import sys
 from aiohttp import web
+from asyncio import get_event_loop, Future
 from gamma import Context as GammaContext
 
 
@@ -189,30 +190,52 @@ def adjust_brightness(flashed):
             return a
     else:
         c = flashed / 255
-        d = pow(c, 2.2)
-        s = (1 - c) / (1 - d)
-        g = gamma / 2.2
+        s = (1 - c) / (1 + c)
 
         def func(x):
-            return a + pow(max(pow(x, 2.2) - d, 0) * s, g) * b
+            return a + pow(x * s, gamma) * b
 
     context.set(func)
 
 
+future = Future()
+future.set_result(None)
+
+
+async def adjust_brightness_async(flashed):
+    global future
+
+    await future
+    future = Future()
+
+    async def task():
+        adjust_brightness(flashed)
+        future.set_result(None)
+
+    get_event_loop().create_task(task())
+
+
 async def handle(request):
     data = await request.json()
-    flashed = extract(data, 'player', 'state', 'flashed', default=0)
 
-    if flashed != extract(data, 'previously', 'player', 'state', 'flashed',
-                          default=flashed):
-        adjust_brightness(flashed)
+    state = extract(data, 'player', 'state')
+
+    if state is None:
+        await adjust_brightness_async(0)
+    else:
+        flashed = state['flashed']
+
+        if flashed != extract(data, 'previously', 'player', 'state', 'flashed',
+                              default=flashed):
+            await adjust_brightness_async(flashed)
 
     return web.Response()
 
 
 context = GammaContext()
 atexit.register(context.close)
-adjust_brightness(flashed=0)
+
+adjust_brightness(0)
 
 app = web.Application()
 app.router.add_post('/', handle)
