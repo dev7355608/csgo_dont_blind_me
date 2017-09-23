@@ -76,29 +76,38 @@ def get_dc():
         thread = Thread(target=worker)
         thread.start()
 
-        yield queue.get()
+        hdcMonitor = queue.get()
+
+        if hdcMonitor is None or not (GetDeviceCaps(hdcMonitor, COLORMGMTCAPS)
+                                      & CM_GAMMA_RAMP):
+            yield hdc
+        else:
+            yield hdcMonitor
+    finally:
         queue.task_done()
 
-        while queue.get() is not None:
+        if hdcMonitor is not None:
+            while queue.get() is not None:
+                queue.task_done()
+
             queue.task_done()
 
-        queue.task_done()
         thread.join()
-    finally:
+
         if not ReleaseDC(None, hdc):
             raise RuntimeError('Unable to release device context')
 
 
 class Context:
     def __init__(self):
+        self._saved_ramp = (WORD * 256 * 3)()
+
         with get_dc() as hdc:
             cmcap = GetDeviceCaps(hdc, COLORMGMTCAPS)
 
             if not cmcap & CM_GAMMA_RAMP:
                 raise RuntimeError('Display device does not support gamma '
-                                   'ramps') from WinError()
-
-            self._saved_ramp = (WORD * 256 * 3)()
+                                   'ramps')
 
             if not GetDeviceGammaRamp(hdc, byref(self._saved_ramp)):
                 raise RuntimeError('Unable to save current gamma '
