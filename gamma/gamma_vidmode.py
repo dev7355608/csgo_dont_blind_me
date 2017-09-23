@@ -85,20 +85,41 @@ class Context:
                                        gamma_r, gamma_g, gamma_b):
             raise RuntimeError('X request failed: XF86VidModeSetGammaRamp')
 
-    def close(self):
+    def set_default(self):
+        display = self._display
+        screen_num = self._screen_num
+
+        ramp_size = self._ramp_size
+        ramp = (c_ushort * ramp_size * 3)()
+
+        for i in range(ramp_size):
+            ramp[0][i] = ramp[1][i] = ramp[2][i] = \
+                int(C_USHORT_MAX * i / ramp_size)
+
+        gamma_r = byref(ramp, 0 * ramp_size * sizeof(c_ushort))
+        gamma_g = byref(ramp, 1 * ramp_size * sizeof(c_ushort))
+        gamma_b = byref(ramp, 2 * ramp_size * sizeof(c_ushort))
+
+        if not XF86VidModeSetGammaRamp(display, screen_num, ramp_size,
+                                       gamma_r, gamma_g, gamma_b):
+            raise RuntimeError('X request failed: XF86VidModeSetGammaRamp')
+
+    def close(self, restore=True):
         try:
-            display = self._display
-            screen_num = self._screen_num
+            if restore:
+                display = self._display
+                screen_num = self._screen_num
 
-            ramp_size = self._ramp_size
-            ramp = self._saved_ramp
+                ramp_size = self._ramp_size
+                ramp = self._saved_ramp
 
-            gamma_r = byref(ramp, 0 * ramp_size * sizeof(c_ushort))
-            gamma_g = byref(ramp, 1 * ramp_size * sizeof(c_ushort))
-            gamma_b = byref(ramp, 2 * ramp_size * sizeof(c_ushort))
+                gamma_r = byref(ramp, 0 * ramp_size * sizeof(c_ushort))
+                gamma_g = byref(ramp, 1 * ramp_size * sizeof(c_ushort))
+                gamma_b = byref(ramp, 2 * ramp_size * sizeof(c_ushort))
 
-            if not XF86VidModeSetGammaRamp(display, screen_num, ramp_size,
-                                           gamma_r, gamma_g, gamma_b):
-                raise RuntimeError('X request failed: XF86VidModeSetGammaRamp')
+                if not XF86VidModeSetGammaRamp(display, screen_num, ramp_size,
+                                               gamma_r, gamma_g, gamma_b):
+                    raise RuntimeError('X request failed: '
+                                       'XF86VidModeSetGammaRamp')
         finally:
             XCloseDisplay(display)

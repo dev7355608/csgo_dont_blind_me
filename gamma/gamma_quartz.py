@@ -51,5 +51,9 @@ class Context:
         if error != kCGErrorSuccess:
             raise RuntimeError('Unable to set gamma ramp')
 
-    def close(self):
+    def set_default(self):
         CGDisplayRestoreColorSyncSettings()
+
+    def close(self, restore=True):
+        if restore:
+            CGDisplayRestoreColorSyncSettings()

@@ -124,8 +124,19 @@ class Context:
             if not SetDeviceGammaRamp(hdc, byref(ramp)):
                 raise RuntimeError('Unable to set gamma ramp') from WinError()
 
-    def close(self):
+    def set_default(self):
+        ramp = (WORD * 256 * 3)()
+
+        for i in range(256):
+            ramp[0][i] = ramp[1][i] = ramp[2][i] = i << 8
+
         with get_dc() as hdc:
-            if not SetDeviceGammaRamp(hdc, byref(self._saved_ramp)):
-                raise RuntimeError('Unable to restore gamma '
-                                   'ramp') from WinError()
+            if not SetDeviceGammaRamp(hdc, byref(ramp)):
+                raise RuntimeError('Unable to set gamma ramp') from WinError()
+
+    def close(self, restore=True):
+        if restore:
+            with get_dc() as hdc:
+                if not SetDeviceGammaRamp(hdc, byref(self._saved_ramp)):
+                    raise RuntimeError('Unable to restore gamma '
+                                       'ramp') from WinError()

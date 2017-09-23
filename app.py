@@ -232,10 +232,32 @@ async def handle(request):
     return web.Response()
 
 
+reset_gamma = settings.get('reset_gamma', False)
+
+with open(settings_path, mode='w') as f:
+    settings['reset_gamma'] = True
+    json.dump(settings, f, indent=2, sort_keys=True)
+
 context = GammaContext()
-atexit.register(context.close)
+
+
+def restore_gamma():
+    if reset_gamma:
+        context.set_default()
+
+    context.close(restore=not reset_gamma)
+
+    with open(settings_path, mode='w') as f:
+        settings['reset_gamma'] = False
+        json.dump(settings, f, indent=2, sort_keys=True)
+
+
+atexit.register(restore_gamma)
 
 adjust_brightness(0)
+
+print("Please exit with CTRL+C! "
+      "If you don't, the gamma won't reset.\n")
 
 app = web.Application()
 app.router.add_post('/', handle)
