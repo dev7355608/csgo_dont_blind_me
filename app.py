@@ -248,6 +248,10 @@ def restore_gamma():
 
     context.close(restore=not reset_gamma)
 
+    if os.path.isfile(settings_path):
+        with open(settings_path) as f:
+            settings = json.load(f)
+
     with open(settings_path, mode='w') as f:
         settings['reset_gamma'] = False
         json.dump(settings, f, indent=2, sort_keys=True)
