@@ -181,6 +181,7 @@ print("Don't forget to disable Xbox DVR/Game bar!\n")
 print("In case you get an error:\n"
       "    Did you restart your PC after running set_max_gamma_range.reg?\n")
 
+
 def adjust_brightness(flashed):
     a = remap[0] / 256
     b = (remap[1] + 1 - remap[0]) / 256

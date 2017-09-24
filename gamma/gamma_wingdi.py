@@ -18,7 +18,6 @@ WORD_MAX = pow(2, sizeof(WORD) * 8) - 1
 COLORMGMTCAPS = 121
 CM_GAMMA_RAMP = 2
 
-
 EnumDisplayMonitors = windll.user32.EnumDisplayMonitors
 GetMonitorInfo = windll.user32.GetMonitorInfoW
 GetDC = windll.user32.GetDC
@@ -54,14 +53,18 @@ def get_dc():
         queue = Queue()
 
         def callback(hMonitor, hdcMonitor, lprcMonitor, dwData):
+            hMonitor = HMONITOR(hMonitor)
+            hdcMonitor = HDC(hdcMonitor)
+
             mi = MONITORINFO()
             mi.cbSize = sizeof(mi)
 
             if not GetMonitorInfo(hMonitor, byref(mi)):
                 raise WinError()
 
-            if mi.dwFlags & MONITORINFOF_PRIMARY:
-                queue.put(HDC(hdcMonitor))
+            if mi.dwFlags & MONITORINFOF_PRIMARY and \
+               GetDeviceCaps(hdcMonitor, COLORMGMTCAPS) & CM_GAMMA_RAMP:
+                queue.put(hdcMonitor)
                 queue.join()
 
             return True
@@ -78,22 +81,23 @@ def get_dc():
 
         hdcMonitor = queue.get()
 
-        if hdcMonitor is None or not (GetDeviceCaps(hdcMonitor, COLORMGMTCAPS)
-                                      & CM_GAMMA_RAMP):
-            yield hdc
-        else:
-            yield hdcMonitor
-    finally:
-        queue.task_done()
-
-        if hdcMonitor is not None:
-            while queue.get() is not None:
-                queue.task_done()
-
+        try:
+            if hdcMonitor is not None:
+                yield hdcMonitor
+        finally:
             queue.task_done()
 
-        thread.join()
+            if hdcMonitor is not None:
+                while queue.get() is not None:
+                    queue.task_done()
 
+                queue.task_done()
+
+            thread.join()
+
+        if hdcMonitor is None:
+            yield hdc
+    finally:
         if not ReleaseDC(None, hdc):
             raise RuntimeError('Unable to release device context')
 
