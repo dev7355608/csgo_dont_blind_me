@@ -76,7 +76,7 @@ if getattr(sys, 'frozen', False):
 elif __file__:
     application_path = os.path.dirname(__file__)
 
-print('Please read the instructions carefully!\n')
+print('PLEASE READ THE INSTRUCTIONS CAREFULLY!\n')
 
 settings_path = os.path.join(application_path, 'settings.json')
 
@@ -178,6 +178,8 @@ print("Don't forget to disable Redshift!")
 print("Don't forget to disable Windows Night Light!")
 print("Don't forget to disable Xbox DVR/Game bar!\n")
 
+print("In case you get an error:\n"
+      "    Did you restart your PC after running set_max_gamma_range.reg?\n")
 
 def adjust_brightness(flashed):
     a = remap[0] / 256
