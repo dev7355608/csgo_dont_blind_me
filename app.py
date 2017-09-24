@@ -175,7 +175,8 @@ print("Don't forget to set the launch option -nogammaramp!\n")
 
 print("Don't forget to disable f.lux!")
 print("Don't forget to disable Redshift!")
-print("Don't forget to disable Windows Night Light!\n")
+print("Don't forget to disable Windows Night Light!")
+print("Don't forget to disable Xbox DVR/Game bar!\n")
 
 
 def adjust_brightness(flashed):

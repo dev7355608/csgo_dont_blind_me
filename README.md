@@ -16,5 +16,6 @@ After launching the app for the first time, do as follows:
 
 
 - Make sure to disable [f.lux](https://justgetflux.com/)!
-- Make sure to disable [Redshift](http://jonls.dk/redshift/)
+- Make sure to disable [Redshift](http://jonls.dk/redshift/)!
 - Make sure to disable Windows Night Light!
+- Make sure to disable Xbox DVR/Game bar!
