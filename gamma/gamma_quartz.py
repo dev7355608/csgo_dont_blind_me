@@ -12,6 +12,7 @@ lib = cdll.LoadLibrary(find_library('ApplicationServices'))
 
 CGMainDisplayID = lib.CGMainDisplayID
 CGDisplayGammaTableCapacity = lib.CGDisplayGammaTableCapacity
+CGGetDisplayTransferByTable = lib.CGGetDisplayTransferByTable
 CGSetDisplayTransferByTable = lib.CGSetDisplayTransferByTable
 CGDisplayRestoreColorSyncSettings = lib.CGDisplayRestoreColorSyncSettings
 
@@ -22,10 +23,29 @@ CGDisplayGammaTableCapacity.restype = c_uint32
 class Display:
     def __init__(self, id):
         self.id = id
-        self.ramp_size = c_uint32(CGDisplayGammaTableCapacity(id))
 
-        if self.ramp_size.value == 0:
+        ramp_size = CGDisplayGammaTableCapacity(id)
+        self.ramp_size = ramp_size
+
+        if ramp_size == 0:
             raise RuntimeError('Gamma ramp size is zero')
+
+        ramp = (c_float * ramp_size * 3)()
+
+        gamma_r = byref(ramp, 0 * ramp_size * sizeof(c_float))
+        gamma_g = byref(ramp, 1 * ramp_size * sizeof(c_float))
+        gamma_b = byref(ramp, 2 * ramp_size * sizeof(c_float))
+
+        sample_count = c_uint32()
+
+        error = CGGetDisplayTransferByTable(id, c_uint32(ramp_size),
+                                            gamma_r, gamma_g, gamma_b,
+                                            byref(sample_count))
+
+        if error != kCGErrorSuccess:
+            raise RuntimeError('Unable to save current gamma ramp')
+
+        self.saved_ramp = ramp
 
 
 class Context:
@@ -35,7 +55,7 @@ class Context:
     def set(self, func):
         display = self._display
 
-        ramp_size = display.ramp_size.value
+        ramp_size = display.ramp_size
         ramp = (c_float * ramp_size * 3)()
 
         for i in range(ramp_size):
@@ -45,7 +65,7 @@ class Context:
         gamma_g = byref(ramp, 1 * ramp_size * sizeof(c_float))
         gamma_b = byref(ramp, 2 * ramp_size * sizeof(c_float))
 
-        error = CGSetDisplayTransferByTable(display.id, display.ramp_size,
+        error = CGSetDisplayTransferByTable(display.id, c_uint32(ramp_size),
                                             gamma_r, gamma_g, gamma_b)
 
         if error != kCGErrorSuccess:
@@ -56,4 +76,18 @@ class Context:
 
     def close(self, restore=True):
         if restore:
-            CGDisplayRestoreColorSyncSettings()
+            display = self._display
+
+            ramp_size = display.ramp_size
+            ramp = display.saved_ramp
+
+            gamma_r = byref(ramp, 0 * ramp_size * sizeof(c_float))
+            gamma_g = byref(ramp, 1 * ramp_size * sizeof(c_float))
+            gamma_b = byref(ramp, 2 * ramp_size * sizeof(c_float))
+
+            error = CGSetDisplayTransferByTable(display.id,
+                                                c_uint32(ramp_size),
+                                                gamma_r, gamma_g, gamma_b)
+
+            if error != kCGErrorSuccess:
+                raise RuntimeError('Unable to restore gamma ramp')

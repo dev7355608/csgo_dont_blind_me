@@ -75,7 +75,7 @@ class Context:
 
         for i in range(ramp_size):
             ramp[0][i] = ramp[1][i] = ramp[2][i] = \
-                int(C_USHORT_MAX * func(i / ramp_size))
+                int(C_USHORT_MAX * func(i / (ramp_size - 1)))
 
         gamma_r = byref(ramp, 0 * ramp_size * sizeof(c_ushort))
         gamma_g = byref(ramp, 1 * ramp_size * sizeof(c_ushort))
@@ -94,7 +94,7 @@ class Context:
 
         for i in range(ramp_size):
             ramp[0][i] = ramp[1][i] = ramp[2][i] = \
-                int(C_USHORT_MAX * i / ramp_size)
+                int(C_USHORT_MAX * i / (ramp_size - 1))
 
         gamma_r = byref(ramp, 0 * ramp_size * sizeof(c_ushort))
         gamma_g = byref(ramp, 1 * ramp_size * sizeof(c_ushort))
