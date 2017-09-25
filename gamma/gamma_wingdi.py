@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from ctypes import byref, sizeof, Structure, windll, WinError
 from ctypes import POINTER
 from ctypes.wintypes import DWORD, HDC, WCHAR, WORD
@@ -25,6 +26,8 @@ class DISPLAY_DEVICE(Structure):
 EnumDisplayDevices = windll.user32.EnumDisplayDevicesW
 CreateIC = windll.gdi32.CreateICW
 DeleteDC = windll.gdi32.DeleteDC
+GetDC = windll.user32.GetDC
+ReleaseDC = windll.user32.ReleaseDC
 GetDeviceCaps = windll.gdi32.GetDeviceCaps
 GetDeviceGammaRamp = windll.gdi32.GetDeviceGammaRamp
 SetDeviceGammaRamp = windll.gdi32.SetDeviceGammaRamp
@@ -32,6 +35,7 @@ SetDeviceGammaRamp = windll.gdi32.SetDeviceGammaRamp
 EnumDisplayDevices.argtypes = [POINTER(WCHAR), DWORD, POINTER(DISPLAY_DEVICE),
                                DWORD]
 CreateIC.restype = HDC
+GetDC.restype = HDC
 
 
 class Context:
@@ -58,21 +62,51 @@ class Context:
             raise RuntimeError('Unable to create device context') \
                   from WinError()
 
-        try:
-            cmcap = GetDeviceCaps(hdc, COLORMGMTCAPS)
+        cmcap = GetDeviceCaps(hdc, COLORMGMTCAPS)
 
-            if not cmcap & CM_GAMMA_RAMP:
-                raise RuntimeError('Display device does not support gamma '
-                                   'ramps')
-
-            self._saved_ramp = (WORD * 256 * 3)()
-
-            if not GetDeviceGammaRamp(hdc, byref(self._saved_ramp)):
-                raise RuntimeError('Unable to save current gamma ramp') \
+        if not cmcap & CM_GAMMA_RAMP:
+            if not DeleteDC(hdc):
+                raise RuntimeError('Unable to delete device context') \
                       from WinError()
+
+            del hdc
+            self._hdc = None
+
+        try:
+            with self._get_dc() as hdc:
+                cmcap = GetDeviceCaps(hdc, COLORMGMTCAPS)
+
+                if not cmcap & CM_GAMMA_RAMP:
+                    raise RuntimeError('Display device does not support gamma '
+                                       'ramps') from WinError()
+
+                self._saved_ramp = (WORD * 256 * 3)()
+
+                if not GetDeviceGammaRamp(hdc, byref(self._saved_ramp)):
+                    raise RuntimeError('Unable to save current gamma ramp') \
+                          from WinError()
         except:
-            DeleteDC(hdc)
+            if self._hdc is not None:
+                DeleteDC(self._hdc)
             raise
+
+    @contextmanager
+    def _get_dc(self):
+        hdc = self._hdc
+
+        if hdc is None:
+            hdc = HDC(GetDC(None))
+
+            if not hdc:
+                raise RuntimeError('Unable to open device context')
+
+            try:
+                yield hdc
+            finally:
+                if not ReleaseDC(None, hdc):
+                    raise RuntimeError('Unable to release device context')
+        else:
+            yield hdc
 
     def set(self, func):
         ramp = (WORD * 256 * 3)()
@@ -81,8 +115,9 @@ class Context:
             ramp[0][i] = ramp[1][i] = ramp[2][i] = \
                 int(WORD_MAX * func(i / 256))
 
-        if not SetDeviceGammaRamp(self._hdc, byref(ramp)):
-            raise RuntimeError('Unable to set gamma ramp') from WinError()
+        with self._get_dc() as hdc:
+            if not SetDeviceGammaRamp(hdc, byref(ramp)):
+                raise RuntimeError('Unable to set gamma ramp') from WinError()
 
     def set_default(self):
         ramp = (WORD * 256 * 3)()
@@ -90,16 +125,19 @@ class Context:
         for i in range(256):
             ramp[0][i] = ramp[1][i] = ramp[2][i] = i << 8
 
-        if not SetDeviceGammaRamp(self._hdc, byref(ramp)):
-            raise RuntimeError('Unable to set gamma ramp') from WinError()
+        with self._get_dc() as hdc:
+            if not SetDeviceGammaRamp(hdc, byref(ramp)):
+                raise RuntimeError('Unable to set gamma ramp') from WinError()
 
     def close(self, restore=True):
         try:
             if restore:
-                if not SetDeviceGammaRamp(self._hdc, byref(self._saved_ramp)):
-                    raise RuntimeError('Unable to restore gamma ramp') \
-                          from WinError()
+                with self._get_dc() as hdc:
+                    if not SetDeviceGammaRamp(hdc, byref(self._saved_ramp)):
+                        raise RuntimeError('Unable to restore gamma ramp') \
+                              from WinError()
         finally:
-            if not DeleteDC(self._hdc):
-                raise RuntimeError('Unable to delete device context') \
-                      from WinError()
+            if self._hdc is not None:
+                if not DeleteDC(self._hdc):
+                    raise RuntimeError('Unable to delete device context') \
+                          from WinError()
