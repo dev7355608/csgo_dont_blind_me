@@ -30,12 +30,20 @@ GetDC = windll.user32.GetDC
 ReleaseDC = windll.user32.ReleaseDC
 GetDeviceCaps = windll.gdi32.GetDeviceCaps
 GetDeviceGammaRamp = windll.gdi32.GetDeviceGammaRamp
-SetDeviceGammaRamp = windll.gdi32.SetDeviceGammaRamp
+_SetDeviceGammaRamp = windll.gdi32.SetDeviceGammaRamp
 
 EnumDisplayDevices.argtypes = [POINTER(WCHAR), DWORD, POINTER(DISPLAY_DEVICE),
                                DWORD]
 CreateIC.restype = HDC
 GetDC.restype = HDC
+
+
+def SetDeviceGammaRamp(hDC, lpRamp):
+    for _ in range(10):
+        if _SetDeviceGammaRamp(hDC, lpRamp):
+            return 1
+
+    return 0
 
 
 class Context:
