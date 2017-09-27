@@ -8,22 +8,35 @@ from asyncio import get_event_loop, Future
 from gamma import Context as GammaContext
 
 
-if getattr(sys, 'frozen', False):
-    class Excepthook:
-        def __init__(self, excepthook):
-            self.exception = False
-            self.excepthook = excepthook
+class Excepthook:
+    def __init__(self, excepthook, handler):
+        self.excepthook = excepthook
+        self.handler = handler
 
-        def __call__(self, type, value, traceback):
-            self.exception = True
-            self.excepthook(type, value, traceback)
+    def __call__(self, type, value, traceback):
+        self.handler.exception = True
+        self.excepthook(type, value, traceback)
 
-    excepthook = Excepthook(sys.excepthook)
-    sys.excepthook = excepthook
 
-    def exit_handler():
-        if excepthook.exception:
-            print('\n\nPress CTRL+C to quit...\n')
+class ExitHandler:
+    def __init__(self, excepthook):
+        self.excepthook = Excepthook(excepthook, self)
+        self.exception = False
+        self.confirm_exit = False
+        self.confirm_exit_on_exception = False
+
+    def __call__(self):
+        if self.exception:
+            print("\n\n"
+                  " (1) Did you restart your PC after running "
+                  "set_max_gamma_range.reg?\n"
+                  " (2) Make sure your graphics card drivers are up to date.\n"
+                  " (3) Make sure your operating system is up to date.\n"
+                  " (4) Try disabling your integrated graphics card.")
+
+        if self.confirm_exit or \
+           self.exception and self.confirm_exit_on_exception:
+            print('\n\nPress CTRL+C to quit...')
 
             try:
                 from time import sleep
@@ -33,13 +46,19 @@ if getattr(sys, 'frozen', False):
             except KeyboardInterrupt:
                 pass
 
-    atexit.register(exit_handler)
 
-    def exit(*args, **kwargs):
-        excepthook.exception = True
-        sys.exit(*args, **kwargs)
-else:
-    exit = sys.exit
+exit_handler = ExitHandler(sys.excepthook)
+exit_handler.confirm_exit_on_exception = getattr(sys, 'frozen', False)
+sys.excepthook = exit_handler.excepthook
+atexit.register(exit_handler)
+
+
+def exit(*args, **kwargs):
+    if getattr(sys, 'frozen', False):
+        exit_handler.confirm_exit = True
+
+    sys.exit(*args, **kwargs)
+
 
 if platform.system() == 'Windows':
     import win32console, win32gui, win32con
@@ -109,10 +128,29 @@ with open(os.path.join(application_path,
     }}
 }}'''.format(port))
 
-print("Don't forget to copy gamestate_integration_dont_blind_me.cfg into\n"
-      "    ...\\Steam\\userdata\\________\\730\\local\\cfg, or\n"
+print("Don't forget to copy gamestate_integration_dont_blind_me.cfg into "
+      "either\n    ...\\Steam\\userdata\\________\\730\\local\\cfg or\n"
       "    ...\\Steam\\steamapps\\common\\Counter-Strike Global Offensive\\"
       "csgo\\cfg!\n")
+
+
+print("Don't forget to set the launch option -nogammaramp!\n"
+      "    (1) Go to the Steam library,\n"
+      "    (2) right click on CS:GO and go to properties and\n"
+      "    (3) click 'Set Launch Options...' and add -nogammaramp.\n")
+
+print("To uninstall, \n"
+      "    (1) remove gamestate_integration_dont_blind_me.cfg from the "
+      "cfg folder and\n"
+      "    (2) remove the launch option -nogammaramp and\n"
+      "    (3) run restore_gamma_range.reg and restart PC if it exists.\n")
+
+print("If your monitor permanently changed in brightness/color,\n"
+      "   (1) restart the app and close it with CTRL+C;\n"
+      "   (2) in case that didn't work, restart your PC.\n"
+      "   (3) If that failed too, make sure the app is closed, then\n"
+      "   (4) set reset_gamma in settings.json to true, then\n"
+      "   (5) open the app and close it again with CTRL+C.\n")
 
 mat_monitorgamma = settings.get('mat_monitorgamma')
 mat_monitorgamma_tv_enabled = settings.get('mat_monitorgamma_tv_enabled')
@@ -126,10 +164,15 @@ else:
 
 print("Don't forget to set your preferred gamma in settings.json! "
       "Currently set to:\n"
-      "    mat_monitorgamma\t\t {:3.2f}\n"
-      "    mat_monitorgamma_tv_enabled\t {}\n".format(
+      "    mat_monitorgamma\t\t {:3.2f}    (Brightness)\n"
+      "    mat_monitorgamma_tv_enabled\t {}       (Color Mode: "
+      "Computer Monitor 0, Television 1)\n".format(
           mat_monitorgamma, int(mat_monitorgamma_tv_enabled)))
 
+print("Don't forget to disable f.lux!")
+print("Don't forget to disable Redshift!")
+print("Don't forget to disable Windows Night Light!")
+print("Don't forget to disable Xbox DVR/Game bar!\n")
 
 if platform.system() == 'Windows':
     from winreg import (HKEY_LOCAL_MACHINE, OpenKey, CloseKey,
@@ -169,17 +212,6 @@ if platform.system() == 'Windows':
               '    (1) run set_max_gamma_range.reg, then\n'
               '    (2) reboot PC for it to take effect!')
         exit()
-
-
-print("Don't forget to set the launch option -nogammaramp!\n")
-
-print("Don't forget to disable f.lux!")
-print("Don't forget to disable Redshift!")
-print("Don't forget to disable Windows Night Light!")
-print("Don't forget to disable Xbox DVR/Game bar!\n")
-
-print("In case you get an error:\n"
-      "    Did you restart your PC after running set_max_gamma_range.reg?\n")
 
 
 def adjust_brightness(flashed):
@@ -264,7 +296,7 @@ atexit.register(restore_gamma)
 
 adjust_brightness(0)
 
-print("Please exit with CTRL+C! "
+print("Please close the app with CTRL+C! "
       "If you don't, the gamma won't reset.\n")
 
 app = web.Application()
