@@ -133,7 +133,6 @@ print("Don't forget to copy gamestate_integration_dont_blind_me.cfg into "
       "    ...\\Steam\\steamapps\\common\\Counter-Strike Global Offensive\\"
       "csgo\\cfg!\n")
 
-
 print("Don't forget to set the launch option -nogammaramp!\n"
       "    (1) Go to the Steam library,\n"
       "    (2) right click on CS:GO and go to properties and\n"
@@ -144,13 +143,6 @@ print("To uninstall, \n"
       "cfg folder and\n"
       "    (2) remove the launch option -nogammaramp and\n"
       "    (3) run restore_gamma_range.reg and restart PC if it exists.\n")
-
-print("If your monitor permanently changed in brightness/color,\n"
-      "   (1) restart the app and close it with CTRL+C;\n"
-      "   (2) in case that didn't work, restart your PC.\n"
-      "   (3) If that failed too, make sure the app is closed, then\n"
-      "   (4) set reset_gamma in settings.json to true, then\n"
-      "   (5) open the app and close it again with CTRL+C.\n")
 
 mat_monitorgamma = settings.get('mat_monitorgamma')
 mat_monitorgamma_tv_enabled = settings.get('mat_monitorgamma_tv_enabled')
@@ -231,7 +223,7 @@ def adjust_brightness(flashed):
         def func(x):
             return a + pow(x * s, gamma) * b
 
-    context.set(func)
+    context.set_ramp(func)
 
 
 future = Future()
@@ -268,37 +260,12 @@ async def handle(request):
     return web.Response()
 
 
-reset_gamma = settings.get('reset_gamma', False)
-
-with open(settings_path, mode='w') as f:
-    settings['reset_gamma'] = True
-    json.dump(settings, f, indent=2, sort_keys=True)
-
-context = GammaContext()
-
-
-def restore_gamma():
-    if reset_gamma:
-        context.set_default()
-
-    context.close(restore=not reset_gamma)
-
-    if os.path.isfile(settings_path):
-        with open(settings_path) as f:
-            settings = json.load(f)
-
-    with open(settings_path, mode='w') as f:
-        settings['reset_gamma'] = False
-        json.dump(settings, f, indent=2, sort_keys=True)
-
-
-atexit.register(restore_gamma)
-
-adjust_brightness(0)
-
 print("Please close the app with CTRL+C! "
       "If you don't, the gamma won't reset.\n")
 
-app = web.Application()
-app.router.add_post('/', handle)
-web.run_app(app, host='127.0.0.1', port=port)
+with GammaContext() as context:
+    adjust_brightness(0)
+
+    app = web.Application()
+    app.router.add_post('/', handle)
+    web.run_app(app, host='127.0.0.1', port=port)

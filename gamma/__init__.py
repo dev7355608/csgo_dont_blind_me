@@ -1,13 +1,5 @@
-import platform as _platform
+from .context import Context
+from .calibration import read_icc_ramp
 
 
-_system = _platform.system()
-
-if _system == 'Windows':
-    from .gamma_wingdi import Context
-elif _system == 'Linux':
-    from .gamma_vidmode import Context
-elif _system == 'Darwin':
-    from .gamma_quartz import Context
-else:
-    raise NotImplementedError(_system)
+__all__ = ['Context', 'read_icc_ramp']
