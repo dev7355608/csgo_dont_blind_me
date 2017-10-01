@@ -1,11 +1,37 @@
 import atexit
-import json
 import os
 import platform
 import sys
 from aiohttp import web
+from configparser import ConfigParser
 from asyncio import get_event_loop, Future
 from gamma import Context as GammaContext
+
+
+DEFAULT_SETTINGS = '''\
+[Video Settings]
+mat_monitorgamma = 2.0
+mat_monitorgamma_tv_enabled = 0
+
+[Game-State Integration]
+host = 127.0.0.1
+port = 54237
+'''
+
+GAMESTATE_INTEGRATION_CFG = '''\
+"csgo_dont_blind_me"
+{{
+    "uri" "http://{host}:{port}"
+    "timeout"   "1.1"
+    "buffer"    "0.0"
+    "throttle"  "0.0"
+    "heartbeat" "300.0"
+    "data"
+    {{
+        "player_id"    "1"
+        "player_state" "1"
+    }}
+}}'''
 
 
 class Excepthook:
@@ -97,36 +123,37 @@ elif __file__:
 
 print('PLEASE READ THE INSTRUCTIONS CAREFULLY!\n')
 
-settings_path = os.path.join(application_path, 'settings.json')
+
+default_settings = ConfigParser()
+default_settings.read_string(DEFAULT_SETTINGS)
+
+settings_path = os.path.join(application_path, 'settings.ini')
+
+settings = ConfigParser()
 
 if os.path.isfile(settings_path):
     with open(settings_path) as f:
-        settings = json.load(f)
-else:
-    settings = dict(port=54237,
-                    mat_monitorgamma=2,
-                    mat_monitorgamma_tv_enabled=0)
+        settings.read_file(f)
 
-    with open(settings_path, mode='w') as f:
-        json.dump(settings, f, indent=2, sort_keys=True)
+for section in default_settings.sections():
+    if not settings.has_section(section):
+        settings.add_section(section)
 
-port = settings.get('port')
+    for option, value in default_settings.items(section):
+        if not settings.has_option(section, option):
+            settings.set(section, option, value)
 
-with open(os.path.join(application_path,
-                       'gamestate_integration_dont_blind_me.cfg'), 'w') as f:
-    f.write('''"csgo_dont_blind_me"
-{{
-    "uri" "http://127.0.0.1:{}"
-    "timeout"   "1.0"
-    "buffer"    "0.0"
-    "throttle"  "0.0"
-    "heartbeat" "300.0"
-    "data"
-    {{
-        "player_id"    "1"
-        "player_state" "1"
-    }}
-}}'''.format(port))
+with open(settings_path, mode='w') as f:
+    settings.write(f)
+
+host = settings.get('Game-State Integration', 'host')
+port = settings.getint('Game-State Integration', 'port')
+
+gamestate_integration_cfg_path = os.path.join(
+    application_path, 'gamestate_integration_dont_blind_me.cfg')
+
+with open(gamestate_integration_cfg_path, 'w') as f:
+    f.write(GAMESTATE_INTEGRATION_CFG.format(host=host, port=port))
 
 print("Don't forget to copy gamestate_integration_dont_blind_me.cfg into "
       "either\n    ...\\Steam\\userdata\\________\\730\\local\\cfg or\n"
@@ -144,8 +171,9 @@ print("To uninstall, \n"
       "    (2) remove the launch option -nogammaramp and\n"
       "    (3) run restore_gamma_range.reg and restart PC if it exists.\n")
 
-mat_monitorgamma = settings.get('mat_monitorgamma')
-mat_monitorgamma_tv_enabled = settings.get('mat_monitorgamma_tv_enabled')
+mat_monitorgamma = settings.getfloat('Video Settings', 'mat_monitorgamma')
+mat_monitorgamma_tv_enabled = settings.getboolean(
+        'Video Settings', 'mat_monitorgamma_tv_enabled')
 
 if mat_monitorgamma_tv_enabled:
     gamma = mat_monitorgamma / 2.5
@@ -154,7 +182,7 @@ else:
     gamma = mat_monitorgamma / 2.2
     remap = (0, 255)
 
-print("Don't forget to set your preferred gamma in settings.json! "
+print("Don't forget to set your preferred gamma in settings.ini! "
       "Currently set to:\n"
       "    mat_monitorgamma\t\t {:3.2f}    (Brightness)\n"
       "    mat_monitorgamma_tv_enabled\t {}       (Color Mode: "
@@ -268,4 +296,4 @@ with GammaContext() as context:
 
     app = web.Application()
     app.router.add_post('/', handle)
-    web.run_app(app, host='127.0.0.1', port=port)
+    web.run_app(app, host=host, port=port)

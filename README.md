@@ -10,7 +10,7 @@ After launching the app for the first time, do as follows:
       - *...\\Steam\\userdata\\\_\_\_\_\_\_\_\_\\730\\local\\cfg*, or
       - *...\\Steam\\steamapps\\common\\Counter-Strike Global Offensive\\csgo\\cfg*.
 
-  2. Set your preferred *mat_monitorgamma* and *mat_monitorgamma_tv_enabled* in *settings.json*.
+  2. Set your preferred *mat_monitorgamma* and *mat_monitorgamma_tv_enabled* in *settings.ini*.
 
   3. Add the launch option *-nogammaramp* to CS:GO.
 
