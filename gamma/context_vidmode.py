@@ -2,8 +2,10 @@ from ctypes import byref, sizeof, string_at, cdll, POINTER
 from ctypes import c_ubyte, c_ushort, c_int, c_long, c_ulong, c_void_p
 from ctypes.util import find_library
 from .calibration import read_icc_ramp
+from .context import Context, ContextError
 
-__all__ = ['Context']
+
+__all__ = ['Context', 'ContextError']
 
 c_uchar = c_ubyte
 c_uchar_p = POINTER(c_uchar)
@@ -50,12 +52,15 @@ def XInternAtom(display, atom_name, only_if_exists):
     return XAtom(_XInternAtom(display, atom_name, only_if_exists))
 
 
-class Context:
-    def __init__(self):
+class VidModeContext(Context):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
         display = XOpenDisplay(None)
 
         if not display:
-            raise RuntimeError('X request failed: XOpenDisplay')
+            raise ContextError('X request failed: XOpenDisplay')
 
         self._display = display
 
@@ -67,13 +72,13 @@ class Context:
         if not XF86VidModeGetGammaRampSize(display, screen_num,
                                            byref(ramp_size)):
             XCloseDisplay(display)
-            raise RuntimeError('X request failed: XF86VidModeGetGammaRampSize')
+            raise ContextError('X request failed: XF86VidModeGetGammaRampSize')
 
         self.ramp_size = ramp_size.value
 
         if self.ramp_size <= 1:
             XCloseDisplay(display)
-            raise RuntimeError('Gamma ramp size is too small')
+            raise ContextError('Gamma ramp size is too small')
 
     def get_ramp(self):
         display = self._display
@@ -88,7 +93,7 @@ class Context:
 
         if not XF86VidModeGetGammaRamp(display, screen_num, ramp_size,
                                        gamma_r, gamma_g, gamma_b):
-            raise RuntimeError('Unable to get gamma ramp')
+            raise ContextError('Unable to get gamma ramp')
 
         return [[ramp[i][j] / C_USHORT_MAX for j in range(ramp_size)]
                 for i in range(3)]
@@ -110,7 +115,7 @@ class Context:
 
         if not XF86VidModeSetGammaRamp(display, screen_num, ramp_size,
                                        gamma_r, gamma_g, gamma_b):
-            raise RuntimeError('Unable to set gamma ramp')
+            raise ContextError('Unable to set gamma ramp')
 
     def close(self):
         try:
@@ -136,7 +141,7 @@ class Context:
                                       byref(actual_type), byref(actual_format),
                                       byref(nitems), byref(bytes_after),
                                       byref(data)) != XSuccess:
-                    raise RuntimeError('X request failed: XGetWindowProperty')
+                    raise ContextError('X request failed: XGetWindowProperty')
 
                 if data:
                     XFree(data)
@@ -147,7 +152,7 @@ class Context:
                                       byref(actual_format), byref(nitems),
                                       byref(bytes_after),
                                       byref(data)) != XSuccess:
-                    raise RuntimeError('X request failed: XGetWindowProperty')
+                    raise ContextError('X request failed: XGetWindowProperty')
 
                 assert bytes_after.value == 0
 
@@ -171,12 +176,6 @@ class Context:
 
             if not XF86VidModeSetGammaRamp(display, screen_num, ramp_size,
                                            gamma_r, gamma_g, gamma_b):
-                raise RuntimeError('Unable to restore gamma ramp')
+                raise ContextError('Unable to restore gamma ramp')
         finally:
             XCloseDisplay(display)
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, type, value, traceback):
-        self.close()

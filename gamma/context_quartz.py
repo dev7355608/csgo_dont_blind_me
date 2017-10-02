@@ -1,8 +1,9 @@
 from ctypes import byref, sizeof, c_float, c_uint32, cdll
 from ctypes.util import find_library
+from .context import Context, ContextError
 
 
-__all__ = ['Context']
+__all__ = ['Context', 'ContextError']
 
 C_FLOAT_SIZE = sizeof(c_float)
 
@@ -30,14 +31,16 @@ def CGDisplayGammaTableCapacity(display):
     return c_uint32(_CGDisplayGammaTableCapacity(display)).value
 
 
-class Context:
-    def __init__(self):
-        self._display = CGMainDisplayID()
+class QuartzContext(Context):
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self._display = CGMainDisplayID()
         self.ramp_size = CGDisplayGammaTableCapacity(self._display)
 
         if self.ramp_size <= 1:
-            raise RuntimeError('Gamma ramp size is too small')
+            raise ContextError('Gamma ramp size is too small')
 
     def get_ramp(self):
         ramp_size = self.ramp_size
@@ -54,7 +57,7 @@ class Context:
                                             byref(sample_count))
 
         if error != kCGErrorSuccess:
-            raise RuntimeError('Unable to get gamma ramp')
+            raise ContextError('Unable to get gamma ramp')
 
         assert sample_count.value == ramp_size
 
@@ -75,13 +78,7 @@ class Context:
                                             gamma_r, gamma_g, gamma_b)
 
         if error != kCGErrorSuccess:
-            raise RuntimeError('Unable to set gamma ramp')
+            raise ContextError('Unable to set gamma ramp')
 
     def close(self):
         CGDisplayRestoreColorSyncSettings()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, type, value, traceback):
-        self.close()

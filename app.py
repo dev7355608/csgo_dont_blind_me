@@ -291,7 +291,7 @@ async def handle(request):
 print("Please close the app with CTRL+C! "
       "If you don't, the gamma won't reset.\n")
 
-with GammaContext() as context:
+with GammaContext.open() as context:
     adjust_brightness(0)
 
     app = web.Application()

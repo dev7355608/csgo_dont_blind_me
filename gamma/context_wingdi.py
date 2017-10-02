@@ -3,6 +3,8 @@ from ctypes import byref, sizeof, Structure, windll, WinError
 from ctypes import create_unicode_buffer, POINTER
 from ctypes.wintypes import DWORD, HDC, WCHAR, WORD
 from .calibration import read_icc_ramp
+from .context import Context, ContextError
+
 
 __all__ = ['Context']
 
@@ -53,8 +55,11 @@ def SetDeviceGammaRamp(hDC, lpRamp):
     return 0
 
 
-class Context:
-    def __init__(self):
+class WinGdiContext(Context):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
         device = DISPLAY_DEVICE()
         device.cb = sizeof(device)
         device_num = 0
@@ -68,20 +73,20 @@ class Context:
             device_num += 1
 
         if device_name is None:
-            raise RuntimeError('No primary display device exists')
+            raise ContextError('No primary display device exists')
 
         hdc = CreateDC(None, device_name, None, None)
         self._hdc = hdc
 
         if not hdc:
-            raise RuntimeError('Unable to create device context') \
+            raise ContextError('Unable to create device context') \
                   from WinError()
 
         cmcap = GetDeviceCaps(hdc, COLORMGMTCAPS)
 
         if not cmcap & CM_GAMMA_RAMP:
             if not DeleteDC(hdc):
-                raise RuntimeError('Unable to delete device context') \
+                raise ContextError('Unable to delete device context') \
                       from WinError()
 
             del hdc
@@ -92,7 +97,7 @@ class Context:
                 cmcap = GetDeviceCaps(hdc, COLORMGMTCAPS)
 
                 if not cmcap & CM_GAMMA_RAMP:
-                    raise RuntimeError('Display device does not support gamma '
+                    raise ContextError('Display device does not support gamma '
                                        'ramps') from WinError()
         except:
             if self._hdc is not None:
@@ -109,13 +114,13 @@ class Context:
             hdc = GetDC(None)
 
             if not hdc:
-                raise RuntimeError('Unable to open device context')
+                raise ContextError('Unable to open device context')
 
             try:
                 yield hdc
             finally:
                 if not ReleaseDC(None, hdc):
-                    raise RuntimeError('Unable to release device context')
+                    raise ContextError('Unable to release device context')
         else:
             yield hdc
 
@@ -124,7 +129,7 @@ class Context:
             ramp = (WORD * 256 * 3)()
 
             if not GetDeviceGammaRamp(hdc, byref(ramp)):
-                raise RuntimeError('Unable to get gamma ramp') \
+                raise ContextError('Unable to get gamma ramp') \
                       from WinError()
 
             return [[ramp[i][j] / 65535 for j in range(256)] for i in range(3)]
@@ -137,7 +142,7 @@ class Context:
 
         with self._get_dc() as hdc:
             if not SetDeviceGammaRamp(hdc, byref(ramp)):
-                raise RuntimeError('Unable to set gamma ramp') from WinError()
+                raise ContextError('Unable to set gamma ramp') from WinError()
 
     def close(self):
         try:
@@ -160,16 +165,10 @@ class Context:
                         ramp[i][j] = int(255 * icc_ramp[i][j] + 0.5) << 8
 
                 if not SetDeviceGammaRamp(hdc, byref(ramp)):
-                    raise RuntimeError('Unable to restore gamma ramp') \
+                    raise ContextError('Unable to restore gamma ramp') \
                           from WinError()
         finally:
             if self._hdc is not None:
                 if not DeleteDC(self._hdc):
-                    raise RuntimeError('Unable to delete device context') \
+                    raise ContextError('Unable to delete device context') \
                           from WinError()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, type, value, traceback):
-        self.close()
