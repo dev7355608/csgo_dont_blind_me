@@ -2,11 +2,14 @@ from contextlib import contextmanager
 from ctypes import byref, sizeof, Structure, windll, WinError
 from ctypes import create_unicode_buffer, POINTER
 from ctypes.wintypes import DWORD, HDC, WCHAR, WORD
+from winreg import HKEY_LOCAL_MACHINE, OpenKey, CloseKey, QueryValueEx
 from .calibration import read_icc_ramp
 from .context import Context, ContextError
 
 
 __all__ = ['Context']
+
+ICM_KEY = 'SOFTWARE\Microsoft\Windows NT\CurrentVersion\ICM'
 
 DISPLAY_DEVICE_PRIMARY_DEVICE = 4
 
@@ -99,6 +102,19 @@ class WinGdiContext(Context):
                 if not cmcap & CM_GAMMA_RAMP:
                     raise ContextError('Display device does not support gamma '
                                        'ramps') from WinError()
+
+            try:
+                key = None
+                key = OpenKey(HKEY_LOCAL_MACHINE, ICM_KEY)
+                gamma_range = QueryValueEx(key, 'GdiIcmGammaRange')[0]
+            except FileNotFoundError:
+                gamma_range = None
+            finally:
+                if key is not None:
+                    CloseKey(key)
+
+            if gamma_range != 256:
+                raise ContextError('Gamma range is limited')
         except:
             if self._hdc is not None:
                 DeleteDC(self._hdc)

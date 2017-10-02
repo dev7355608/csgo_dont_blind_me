@@ -54,8 +54,7 @@ class ExitHandler:
     def __call__(self):
         if self.exception:
             print("\n\n"
-                  " (1) Did you restart your PC after running "
-                  "set_max_gamma_range.reg?\n"
+                  " (1) Did you run unlock_gamma_range.reg and restart PC?\n"
                   " (2) Make sure your graphics card drivers are up to date.\n"
                   " (3) Make sure your operating system is up to date.\n"
                   " (4) Try disabling your integrated graphics card.")
@@ -163,13 +162,22 @@ print("Don't forget to copy gamestate_integration_dont_blind_me.cfg into "
 print("Don't forget to set the launch option -nogammaramp!\n"
       "    (1) Go to the Steam library,\n"
       "    (2) right click on CS:GO and go to properties and\n"
-      "    (3) click 'Set Launch Options...' and add -nogammaramp.\n")
+      "    (3) click 'Set Launch Options...' and add -nogammaramp.")
+
+if platform.system() == 'Windows':
+    print("    (4) Run unlock_gamma_range.reg and restart PC.\n")
+else:
+    print()
 
 print("To uninstall, \n"
       "    (1) remove gamestate_integration_dont_blind_me.cfg from the "
       "cfg folder and\n"
-      "    (2) remove the launch option -nogammaramp and\n"
-      "    (3) run restore_gamma_range.reg and restart PC if it exists.\n")
+      "    (2) remove the launch option -nogammaramp.")
+
+if platform.system() == 'Windows':
+    print("    (3) Run lock_gamma_range.reg and restart PC.\n")
+else:
+    print()
 
 mat_monitorgamma = settings.getfloat('Video Settings', 'mat_monitorgamma')
 mat_monitorgamma_tv_enabled = settings.getboolean(
@@ -193,45 +201,6 @@ print("Don't forget to disable f.lux!")
 print("Don't forget to disable Redshift!")
 print("Don't forget to disable Windows Night Light!")
 print("Don't forget to disable Xbox DVR/Game bar!\n")
-
-if platform.system() == 'Windows':
-    from winreg import (HKEY_LOCAL_MACHINE, OpenKey, CloseKey,
-                        QueryValueEx)
-
-    icm = r'SOFTWARE\Microsoft\Windows NT\CurrentVersion\ICM'
-    key = None
-
-    try:
-        key = OpenKey(HKEY_LOCAL_MACHINE, icm)
-        gamma_range = QueryValueEx(key, 'GdiIcmGammaRange')[0]
-    except FileNotFoundError:
-        gamma_range = None
-    finally:
-        if key is not None:
-            CloseKey(key)
-
-    if gamma_range != 256:
-        with open(os.path.join(application_path,
-                               'restore_gamma_range.reg'), mode='w') as f:
-            f.write('Windows Registry Editor Version 5.00\n\n')
-            f.write('[HKEY_LOCAL_MACHINE\{}]\n'.format(icm))
-            f.write('"GdiIcmGammaRange"=')
-
-            if gamma_range is None:
-                f.write('-')
-            else:
-                f.write('dword:{:08x}'.format(gamma_range))
-
-        with open(os.path.join(application_path,
-                               'set_max_gamma_range.reg'), mode='w') as f:
-            f.write('Windows Registry Editor Version 5.00\n\n')
-            f.write('[HKEY_LOCAL_MACHINE\{}]\n'.format(icm))
-            f.write('"GdiIcmGammaRange"=dword:{:08x}'.format(256))
-
-        print('Gamma range is currently limited. To fix that, please\n'
-              '    (1) run set_max_gamma_range.reg, then\n'
-              '    (2) reboot PC for it to take effect!')
-        exit()
 
 
 def adjust_brightness(flashed):
