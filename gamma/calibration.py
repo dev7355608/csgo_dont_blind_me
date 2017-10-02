@@ -273,9 +273,7 @@ def read_icc_ramp(file_or_bytes, size=256, system=None):
              for j in range(size)] for i in range(3)]
 
     for i in range(3):
-        ramp[i][0] = min(max(ramp[i][0], 0.0), 1.0)
-
-        for j in range(1, size):
-            ramp[i][j] = min(max(ramp[i][j], ramp[i][j - 1]), 1.0)
+        for j in range(size):
+            ramp[i][j] = min(max(ramp[i][j], 0.0), 1.0)
 
     return ramp
