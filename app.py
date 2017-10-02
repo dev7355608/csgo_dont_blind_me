@@ -1,10 +1,9 @@
-import atexit
 import os
 import platform
 import sys
+import traceback
 from aiohttp import web
 from configparser import ConfigParser
-from asyncio import get_event_loop, Future
 from gamma import Context as GammaContext
 
 
@@ -34,79 +33,6 @@ GAMESTATE_INTEGRATION_CFG = '''\
 }}'''
 
 
-class Excepthook:
-    def __init__(self, excepthook, handler):
-        self.excepthook = excepthook
-        self.handler = handler
-
-    def __call__(self, type, value, traceback):
-        self.handler.exception = True
-        self.excepthook(type, value, traceback)
-
-
-class ExitHandler:
-    def __init__(self, excepthook):
-        self.excepthook = Excepthook(excepthook, self)
-        self.exception = False
-        self.confirm_exit = False
-        self.confirm_exit_on_exception = False
-
-    def __call__(self):
-        if self.exception:
-            print("\n\n"
-                  " (1) Did you run unlock_gamma_range.reg and restart PC?\n"
-                  " (2) Make sure your graphics card drivers are up to date.\n"
-                  " (3) Make sure your operating system is up to date.\n"
-                  " (4) Try disabling your integrated graphics card.")
-
-        if self.confirm_exit or \
-           self.exception and self.confirm_exit_on_exception:
-            print('\n\nPress CTRL+C to quit...')
-
-            try:
-                from time import sleep
-
-                while True:
-                    sleep(1)
-            except KeyboardInterrupt:
-                pass
-
-
-exit_handler = ExitHandler(sys.excepthook)
-exit_handler.confirm_exit_on_exception = getattr(sys, 'frozen', False)
-sys.excepthook = exit_handler.excepthook
-atexit.register(exit_handler)
-
-
-def exit(*args, **kwargs):
-    if getattr(sys, 'frozen', False):
-        exit_handler.confirm_exit = True
-
-    sys.exit(*args, **kwargs)
-
-
-if platform.system() == 'Windows':
-    import win32console, win32gui, win32con
-
-    hwnd = win32console.GetConsoleWindow()
-
-    if hwnd:
-        hMenu = win32gui.GetSystemMenu(hwnd, False)
-
-        if hMenu:
-            win32gui.EnableMenuItem(hMenu, win32con.SC_CLOSE,
-                                    win32con.MF_BYCOMMAND |
-                                    win32con.MF_DISABLED |
-                                    win32con.MF_GRAYED)
-
-            def restore_close_button():
-                win32gui.EnableMenuItem(hMenu, win32con.SC_CLOSE,
-                                        win32con.MF_BYCOMMAND |
-                                        win32con.MF_ENABLED)
-
-            atexit.register(restore_close_button)
-
-
 def extract(data, *keys, default=None):
     for key in keys:
         if not isinstance(data, dict) or key not in data:
@@ -115,154 +41,170 @@ def extract(data, *keys, default=None):
     return data
 
 
-if getattr(sys, 'frozen', False):
-    application_path = os.path.dirname(sys.executable)
-elif __file__:
-    application_path = os.path.dirname(__file__)
+class App:
+    def __init__(self, path=None):
+        if path is None:
+            path = os.getcwd()
 
-print('PLEASE READ THE INSTRUCTIONS CAREFULLY!\n')
+        default_settings = ConfigParser()
+        default_settings.read_string(DEFAULT_SETTINGS)
+
+        settings_path = os.path.join(path, 'settings.ini')
+
+        settings = ConfigParser()
+
+        if os.path.isfile(settings_path):
+            with open(settings_path) as f:
+                settings.read_file(f)
+
+        for section in default_settings.sections():
+            if not settings.has_section(section):
+                settings.add_section(section)
+
+            for option, value in default_settings.items(section):
+                if not settings.has_option(section, option):
+                    settings.set(section, option, value)
+
+        with open(settings_path, mode='w') as f:
+            settings.write(f)
+
+        self.host = settings.get('Game-State Integration', 'host')
+        self.port = settings.getint('Game-State Integration', 'port')
+
+        gamestate_integration_cfg_path = os.path.join(
+            path, 'gamestate_integration_dont_blind_me.cfg')
+
+        with open(gamestate_integration_cfg_path, 'w') as f:
+            f.write(GAMESTATE_INTEGRATION_CFG.format(host=self.host,
+                                                     port=self.port))
+
+        self.mat_monitorgamma = settings.getfloat(
+                'Video Settings', 'mat_monitorgamma')
+        self.mat_monitorgamma_tv_enabled = settings.getboolean(
+                'Video Settings', 'mat_monitorgamma_tv_enabled')
+
+        self.context = GammaContext.open()
+
+    async def handle(self, request):
+        data = await request.json()
+
+        state = extract(data, 'player', 'state')
+
+        if state is None:
+            self.adjust_brightness(0)
+        else:
+            flashed = state['flashed']
+
+            if flashed != extract(data, 'previously', 'player', 'state',
+                                  'flashed', default=flashed):
+                self.adjust_brightness(flashed)
+
+        return web.Response()
+
+    def adjust_brightness(self, flashed):
+        if self.mat_monitorgamma_tv_enabled:
+            gamma = self.mat_monitorgamma / 2.5
+            remap = (16, 235)
+        else:
+            gamma = self.mat_monitorgamma / 2.2
+            remap = (0, 255)
+
+        a = remap[0] / 256
+        b = (remap[1] + 1 - remap[0]) / 256
+
+        if flashed == 0:
+            def func(x):
+                return a + pow(x, gamma) * b
+        elif flashed == 255:
+            def func(x):
+                return a
+        else:
+            c = flashed / 255
+            s = (1 - c) / (1 + c)
+
+            def func(x):
+                return a + pow(x * s, gamma) * b
+
+        self.context.set_ramp(func)
+
+    def run(self):
+        self.adjust_brightness(0)
+
+        self.app = web.Application()
+        self.app.router.add_post('/', self.handle)
+        web.run_app(self.app, host=self.host, port=self.port)
+
+    def close(self):
+        self.context.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self.close()
 
 
-default_settings = ConfigParser()
-default_settings.read_string(DEFAULT_SETTINGS)
+if __name__ == '__main__':
+    if getattr(sys, 'frozen', False):
+        app_path = os.path.dirname(sys.executable)
+    elif __file__:
+        app_path = os.path.dirname(__file__)
 
-settings_path = os.path.join(application_path, 'settings.ini')
+    print('PLEASE READ THE INSTRUCTIONS CAREFULLY!\n')
 
-settings = ConfigParser()
+    print("Don't forget to copy gamestate_integration_dont_blind_me.cfg into\n"
+          "    .../Steam/userdata/________/730/local/cfg or\n"
+          "    .../Steam/steamapps/common/Counter-Strike Global Offensive"
+          "/csgo/cfg!\n")
 
-if os.path.isfile(settings_path):
-    with open(settings_path) as f:
-        settings.read_file(f)
+    print("Don't forget to set the launch option -nogammaramp!\n"
+          "    (1) Go to the Steam library,\n"
+          "    (2) right click on CS:GO and go to properties.\n"
+          "    (3) Click 'Set Launch Options...' and add -nogammaramp.")
 
-for section in default_settings.sections():
-    if not settings.has_section(section):
-        settings.add_section(section)
-
-    for option, value in default_settings.items(section):
-        if not settings.has_option(section, option):
-            settings.set(section, option, value)
-
-with open(settings_path, mode='w') as f:
-    settings.write(f)
-
-host = settings.get('Game-State Integration', 'host')
-port = settings.getint('Game-State Integration', 'port')
-
-gamestate_integration_cfg_path = os.path.join(
-    application_path, 'gamestate_integration_dont_blind_me.cfg')
-
-with open(gamestate_integration_cfg_path, 'w') as f:
-    f.write(GAMESTATE_INTEGRATION_CFG.format(host=host, port=port))
-
-print("Don't forget to copy gamestate_integration_dont_blind_me.cfg into "
-      "either\n    ...\\Steam\\userdata\\________\\730\\local\\cfg or\n"
-      "    ...\\Steam\\steamapps\\common\\Counter-Strike Global Offensive\\"
-      "csgo\\cfg!\n")
-
-print("Don't forget to set the launch option -nogammaramp!\n"
-      "    (1) Go to the Steam library,\n"
-      "    (2) right click on CS:GO and go to properties and\n"
-      "    (3) click 'Set Launch Options...' and add -nogammaramp.")
-
-if platform.system() == 'Windows':
-    print("    (4) Run unlock_gamma_range.reg and restart PC.\n")
-else:
-    print()
-
-print("To uninstall, \n"
-      "    (1) remove gamestate_integration_dont_blind_me.cfg from the "
-      "cfg folder and\n"
-      "    (2) remove the launch option -nogammaramp.")
-
-if platform.system() == 'Windows':
-    print("    (3) Run lock_gamma_range.reg and restart PC.\n")
-else:
-    print()
-
-mat_monitorgamma = settings.getfloat('Video Settings', 'mat_monitorgamma')
-mat_monitorgamma_tv_enabled = settings.getboolean(
-        'Video Settings', 'mat_monitorgamma_tv_enabled')
-
-if mat_monitorgamma_tv_enabled:
-    gamma = mat_monitorgamma / 2.5
-    remap = (16, 235)
-else:
-    gamma = mat_monitorgamma / 2.2
-    remap = (0, 255)
-
-print("Don't forget to set your preferred gamma in settings.ini! "
-      "Currently set to:\n"
-      "    mat_monitorgamma\t\t {:3.2f}    (Brightness)\n"
-      "    mat_monitorgamma_tv_enabled\t {}       (Color Mode: "
-      "Computer Monitor 0, Television 1)\n".format(
-          mat_monitorgamma, int(mat_monitorgamma_tv_enabled)))
-
-print("Don't forget to disable f.lux!")
-print("Don't forget to disable Redshift!")
-print("Don't forget to disable Windows Night Light!")
-print("Don't forget to disable Xbox DVR/Game bar!\n")
-
-
-def adjust_brightness(flashed):
-    a = remap[0] / 256
-    b = (remap[1] + 1 - remap[0]) / 256
-
-    if flashed == 0:
-        def func(x):
-            return a + pow(x, gamma) * b
-    elif flashed == 255:
-        def func(x):
-            return a
+    if platform.system() == 'Windows':
+        print("    (4) Run unlock_gamma_range.reg and restart PC.\n")
     else:
-        c = flashed / 255
-        s = (1 - c) / (1 + c)
+        print()
 
-        def func(x):
-            return a + pow(x * s, gamma) * b
+    print("To uninstall, \n"
+          "    (1) delete gamestate_integration_dont_blind_me.cfg from cfg "
+          "folder and\n"
+          "    (2) remove the launch option -nogammaramp.")
 
-    context.set_ramp(func)
-
-
-future = Future()
-future.set_result(None)
-
-
-async def adjust_brightness_async(flashed):
-    global future
-
-    await future
-    future = Future()
-
-    async def task():
-        adjust_brightness(flashed)
-        future.set_result(None)
-
-    get_event_loop().create_task(task())
-
-
-async def handle(request):
-    data = await request.json()
-
-    state = extract(data, 'player', 'state')
-
-    if state is None:
-        await adjust_brightness_async(0)
+    if platform.system() == 'Windows':
+        print("    (3) Run lock_gamma_range.reg and restart PC.\n")
     else:
-        flashed = state['flashed']
+        print()
 
-        if flashed != extract(data, 'previously', 'player', 'state', 'flashed',
-                              default=flashed):
-            await adjust_brightness_async(flashed)
+    print("Don't forget to disable f.lux!")
+    print("Don't forget to disable Redshift!")
+    print("Don't forget to disable Windows Night Light!")
+    print("Don't forget to disable Xbox DVR/Game bar!\n")
 
-    return web.Response()
+    print("Don't forget to set your preferred settings in settings.ini!\n")
 
+    try:
+        with App(path=app_path) as app:
+            print("Current settings:\n"
+                  "    mat_monitorgamma\t\t {:3.2f}   (Brightness)\n"
+                  "    mat_monitorgamma_tv_enabled\t {:d}      (Color Mode: "
+                  "Computer Monitor 0, Television 1)\n".format(
+                      app.mat_monitorgamma, app.mat_monitorgamma_tv_enabled))
 
-print("Please close the app with CTRL+C! "
-      "If you don't, the gamma won't reset.\n")
+            print("PLEASE CLOSE THE APP WITH CTRL+C!\n")
 
-with GammaContext.open() as context:
-    adjust_brightness(0)
+            app.run()
+    except:
+        traceback.print_exc()
 
-    app = web.Application()
-    app.router.add_post('/', handle)
-    web.run_app(app, host=host, port=port)
+        print('\n')
+
+        if platform.system() == 'Windows':
+            print("  - Did you run unlock_gamma_range.reg and restart PC?")
+
+        print("  - Make sure your graphics card drivers are up to date.\n"
+              "  - Make sure your operating system is up to date.\n"
+              "  - Try disabling your integrated graphics card.")
+
+        sys.exit(1)
