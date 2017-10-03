@@ -3,34 +3,9 @@ import platform
 import sys
 import traceback
 from aiohttp import web
-from configparser import ConfigParser
+from configobj import ConfigObj, get_extra_values, flatten_errors
+from validate import Validator
 from gamma import Context as GammaContext
-
-
-DEFAULT_SETTINGS = '''\
-[Video Settings]
-mat_monitorgamma = 2.0
-mat_monitorgamma_tv_enabled = 0
-
-[Game-State Integration]
-host = 127.0.0.1
-port = 54237
-'''
-
-GAMESTATE_INTEGRATION_CFG = '''\
-"csgo_dont_blind_me"
-{{
-    "uri" "http://{host}:{port}"
-    "timeout"   "1.1"
-    "buffer"    "0.0"
-    "throttle"  "0.0"
-    "heartbeat" "300.0"
-    "data"
-    {{
-        "player_id"    "1"
-        "player_state" "1"
-    }}
-}}'''
 
 
 def extract(data, *keys, default=None):
@@ -41,47 +16,85 @@ def extract(data, *keys, default=None):
     return data
 
 
+def resource_path(filename=None):
+    try:
+        base_path = sys._MEIPASS
+    except:
+        base_path = os.path.dirname(__file__)
+
+    if filename is None:
+        return base_path
+
+    return os.path.join(base_path, filename)
+
+
 class App:
     def __init__(self, path=None):
         if path is None:
             path = os.getcwd()
 
-        default_settings = ConfigParser()
-        default_settings.read_string(DEFAULT_SETTINGS)
+        res_path = resource_path()
 
         settings_path = os.path.join(path, 'settings.ini')
+        default_settings_path = os.path.join(res_path, 'settings.ini.default')
 
-        settings = ConfigParser()
+        settings = ConfigObj(settings_path,
+                             configspec=default_settings_path,
+                             encoding='utf-8')
+        settings.filename = settings_path
 
-        if os.path.isfile(settings_path):
-            with open(settings_path) as f:
-                settings.read_file(f)
+        validator = Validator()
+        result = settings.validate(validator, preserve_errors=True, copy=True)
 
-        for section in default_settings.sections():
-            if not settings.has_section(section):
-                settings.add_section(section)
+        for sections, key in get_extra_values(settings):
+            section = settings
 
-            for option, value in default_settings.items(section):
-                if not settings.has_option(section, option):
-                    settings.set(section, option, value)
+            for section_name in sections:
+                section = section[section_name]
 
-        with open(settings_path, mode='w') as f:
-            settings.write(f)
+            del section[key]
 
-        self.host = settings.get('Game-State Integration', 'host')
-        self.port = settings.getint('Game-State Integration', 'port')
+        for sections, key, result in flatten_errors(settings, result):
+            section = settings
+
+            for section_name in sections:
+                section = section[section_name]
+
+            del section[key]
+
+        assert settings.validate(validator, preserve_errors=False, copy=True)
+
+        default_settings = ConfigObj(default_settings_path,
+                                     configspec=default_settings_path,
+                                     encoding='utf-8')
+        default_settings.merge(settings)
+
+        settings = default_settings
+        settings.filename = settings_path
+        settings.write()
+
+        self.settings = settings
+
+        self.host = settings['Game State Integration']['host']
+        self.port = settings['Game State Integration'].as_int('port')
+
+        gamestate_integration_cfg_template_path = os.path.join(
+            res_path, 'gamestate_integration_dont_blind_me.cfg.template')
+
+        with open(gamestate_integration_cfg_template_path) as f:
+            gamestate_integration_cfg_template = f.read()
 
         gamestate_integration_cfg_path = os.path.join(
             path, 'gamestate_integration_dont_blind_me.cfg')
 
-        with open(gamestate_integration_cfg_path, 'w') as f:
-            f.write(GAMESTATE_INTEGRATION_CFG.format(host=self.host,
-                                                     port=self.port))
+        with open(gamestate_integration_cfg_path, mode='w') as f:
+            f.write(gamestate_integration_cfg_template.format(host=self.host,
+                                                              port=self.port))
 
-        self.mat_monitorgamma = settings.getfloat(
-                'Video Settings', 'mat_monitorgamma')
-        self.mat_monitorgamma_tv_enabled = settings.getboolean(
-                'Video Settings', 'mat_monitorgamma_tv_enabled')
+        self.mat_monitorgamma = settings['Video Settings'].as_float(
+                'mat_monitorgamma')
+        self.mat_monitorgamma_tv_enabled = settings['Video Settings'].as_bool(
+                'mat_monitorgamma_tv_enabled')
 
         self.context = GammaContext.open()
 

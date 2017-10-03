@@ -1,0 +1,9 @@
+[Video Settings]
+# Brightness (min. 1.6; max. 2.6)
+mat_monitorgamma = float(1.6, 2.6, default=2.0)
+# Color Mode (Computer Monitor: 0; Television: 1)
+mat_monitorgamma_tv_enabled = option(0, 1, default=0)
+
+[Game State Integration]
+host = ip_addr(default=127.0.0.1)
+port = integer(49152, 65535, default=54237)
