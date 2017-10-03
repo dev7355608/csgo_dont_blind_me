@@ -3,7 +3,7 @@ import sys
 from aiohttp import web
 from configobj import ConfigObj, get_extra_values, flatten_errors
 from validate import Validator
-from gamma import Context as GammaContext
+from gamma import Context, generate_ramp
 
 
 def extract(data, *keys, default=None):
@@ -94,7 +94,7 @@ class App:
         self.mat_monitorgamma_tv_enabled = settings['Video Settings'].as_bool(
                 'mat_monitorgamma_tv_enabled')
 
-        self.context = GammaContext.open()
+        self.context = Context.open()
 
     async def handle(self, request):
         data = await request.json()
@@ -115,28 +115,21 @@ class App:
     def adjust_brightness(self, flashed):
         if self.mat_monitorgamma_tv_enabled:
             gamma = self.mat_monitorgamma / 2.5
-            remap = (16, 235)
+            minimum = 16 / 255
+            maximum = 235 / 255
         else:
             gamma = self.mat_monitorgamma / 2.2
-            remap = (0, 255)
+            minimum = 0.0
+            maximum = 1.0
 
-        a = remap[0] / 256
-        b = (remap[1] + 1 - remap[0]) / 256
+        flashed = flashed / 255
+        contrast = (1 - flashed) / (1 + flashed)
 
-        if flashed == 0:
-            def func(x):
-                return a + pow(x, gamma) * b
-        elif flashed == 255:
-            def func(x):
-                return a
-        else:
-            c = flashed / 255
-            s = (1 - c) / (1 + c)
+        ramp = generate_ramp(size=self.context.ramp_size, gamma=gamma,
+                             contrast=contrast, minimum=minimum,
+                             maximum=maximum)
 
-            def func(x):
-                return a + pow(x * s, gamma) * b
-
-        self.context.set_ramp(func)
+        self.context.set_ramp(ramp)
 
     def run(self):
         self.adjust_brightness(0)

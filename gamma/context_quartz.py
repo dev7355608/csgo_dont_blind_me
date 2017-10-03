@@ -63,16 +63,17 @@ class QuartzContext(Context):
 
         return [[ramp[i][j] for j in range(ramp_size)] for i in range(3)]
 
-    def set_ramp(self, func):
+    def set_ramp(self, ramp):
         ramp_size = self.ramp_size
-        ramp = (c_float * ramp_size * 3)()
+        _ramp = (c_float * ramp_size * 3)()
 
-        for i in range(ramp_size):
-            ramp[0][i] = ramp[1][i] = ramp[2][i] = func(i / ramp_size)
+        for i in range(3):
+            for j in range(ramp_size):
+                _ramp[i][j] = ramp[i][j]
 
-        gamma_r = byref(ramp, 0 * ramp_size * C_FLOAT_SIZE)
-        gamma_g = byref(ramp, 1 * ramp_size * C_FLOAT_SIZE)
-        gamma_b = byref(ramp, 2 * ramp_size * C_FLOAT_SIZE)
+        gamma_r = byref(_ramp, 0 * ramp_size * C_FLOAT_SIZE)
+        gamma_g = byref(_ramp, 1 * ramp_size * C_FLOAT_SIZE)
+        gamma_b = byref(_ramp, 2 * ramp_size * C_FLOAT_SIZE)
 
         error = CGSetDisplayTransferByTable(self._display, c_uint32(ramp_size),
                                             gamma_r, gamma_g, gamma_b)

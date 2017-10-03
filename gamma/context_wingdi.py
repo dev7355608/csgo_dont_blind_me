@@ -151,14 +151,15 @@ class WinGdiContext(Context):
 
             return [[ramp[i][j] / 65535 for j in range(256)] for i in range(3)]
 
-    def set_ramp(self, func):
-        ramp = (WORD * 256 * 3)()
+    def set_ramp(self, ramp):
+        _ramp = (WORD * 256 * 3)()
 
-        for i in range(256):
-            ramp[0][i] = ramp[1][i] = ramp[2][i] = int(65535 * func(i / 255))
+        for i in range(3):
+            for j in range(256):
+                _ramp[i][j] = int(65535 * ramp[i][j])
 
         with self._get_dc() as hdc:
-            if not SetDeviceGammaRamp(hdc, byref(ramp)):
+            if not SetDeviceGammaRamp(hdc, byref(_ramp)):
                 raise ContextError('Unable to set gamma ramp; has the gamma '
                                    'range been unlocked yet?') from WinError()
 

@@ -98,20 +98,20 @@ class VidModeContext(Context):
         return [[ramp[i][j] / C_USHORT_MAX for j in range(ramp_size)]
                 for i in range(3)]
 
-    def set_ramp(self, func):
+    def set_ramp(self, ramp):
         display = self._display
         screen_num = self._screen_num
 
         ramp_size = self.ramp_size
-        ramp = (c_ushort * ramp_size * 3)()
+        _ramp = (c_ushort * ramp_size * 3)()
 
-        for i in range(ramp_size):
-            ramp[0][i] = ramp[1][i] = ramp[2][i] = \
-                int(C_USHORT_MAX * func(i / (ramp_size - 1)))
+        for i in range(3):
+            for j in range(ramp_size):
+                _ramp[i][j] = int(C_USHORT_MAX * ramp[i][j])
 
-        gamma_r = byref(ramp, 0 * ramp_size * C_USHORT_SIZE)
-        gamma_g = byref(ramp, 1 * ramp_size * C_USHORT_SIZE)
-        gamma_b = byref(ramp, 2 * ramp_size * C_USHORT_SIZE)
+        gamma_r = byref(_ramp, 0 * ramp_size * C_USHORT_SIZE)
+        gamma_g = byref(_ramp, 1 * ramp_size * C_USHORT_SIZE)
+        gamma_b = byref(_ramp, 2 * ramp_size * C_USHORT_SIZE)
 
         if not XF86VidModeSetGammaRamp(display, screen_num, ramp_size,
                                        gamma_r, gamma_g, gamma_b):
