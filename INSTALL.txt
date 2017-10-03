@@ -1,0 +1,22 @@
+## Install
+
+1. First launch the app and let it generate all necessary files.
+2. Copy `gamestate_integration_dont_blind_me.cfg` into either
+     - `.../Steam/userdata/________/730/local/cfg` or
+     - `.../Steam/steamapps/common/Counter-Strike Global Offensive/csgo/cfg`.
+3. Add the launch option -nogammaramp to CS:GO.
+     1. Go to the Steam library.
+     2. Right click on CS:GO and go to properties.
+     3. Click *Set launch options...* and add `-nogammaramp`.
+4. Run `unlock_gamma_range.reg` and restart PC. (Windows only)
+5. Set your preferred `mat_monitorgamma` and `mat_monitorgamma_tv_enabled`
+   in `settings.ini`.
+6. Make sure to disable f.lux and Redshift while the app is running!
+   It is compatible with Windows Night Light though.
+
+
+## Uninstall
+
+1. Delete `gamestate_integration_dont_blind_me.cfg` from the cfg folder.
+2. Remove the launch option `-nogammaramp`.
+3. Run `lock_gamma_range.reg` and restart PC. (Windows only)

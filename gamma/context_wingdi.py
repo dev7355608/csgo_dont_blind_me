@@ -114,7 +114,8 @@ class WinGdiContext(Context):
                     CloseKey(key)
 
             if gamma_range != 256:
-                raise ContextError('Gamma range is limited')
+                raise ContextError('Gamma range is currently limited; please '
+                                   'unlock it!')
         except:
             if self._hdc is not None:
                 DeleteDC(self._hdc)
@@ -158,7 +159,8 @@ class WinGdiContext(Context):
 
         with self._get_dc() as hdc:
             if not SetDeviceGammaRamp(hdc, byref(ramp)):
-                raise ContextError('Unable to set gamma ramp') from WinError()
+                raise ContextError('Unable to set gamma ramp; has the gamma '
+                                   'range been unlocked yet?') from WinError()
 
     def close(self):
         try:

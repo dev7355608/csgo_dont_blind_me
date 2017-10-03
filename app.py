@@ -1,7 +1,5 @@
 import os
-import platform
 import sys
-import traceback
 from aiohttp import web
 from configobj import ConfigObj, get_extra_values, flatten_errors
 from validate import Validator
@@ -163,61 +161,17 @@ if __name__ == '__main__':
     elif __file__:
         app_path = os.path.dirname(__file__)
 
-    print('PLEASE READ THE INSTRUCTIONS CAREFULLY!\n')
+    print('# csgo_dont_blind_me\n')
+    print('-' * 80 + '\n')
 
-    print("Don't forget to copy gamestate_integration_dont_blind_me.cfg into\n"
-          "    .../Steam/userdata/________/730/local/cfg or\n"
-          "    .../Steam/steamapps/common/Counter-Strike Global Offensive"
-          "/csgo/cfg!\n")
+    with open(resource_path('INSTALL.txt')) as f:
+        print(f.read())
 
-    print("Don't forget to set the launch option -nogammaramp!\n"
-          "    (1) Go to the Steam library,\n"
-          "    (2) right click on CS:GO and go to properties.\n"
-          "    (3) Click 'Set Launch Options...' and add -nogammaramp.")
+    print('-' * 80 + '\n')
 
-    if platform.system() == 'Windows':
-        print("    (4) Run unlock_gamma_range.reg and restart PC.\n")
-    else:
-        print()
+    with App(path=app_path) as app:
+        app.settings.write(sys.stdout.buffer)
+        print('\n' + '-' * 80 + '\n')
+        print("PLEASE CLOSE THE APP WITH CTRL+C!\n")
 
-    print("To uninstall, \n"
-          "    (1) delete gamestate_integration_dont_blind_me.cfg from cfg "
-          "folder and\n"
-          "    (2) remove the launch option -nogammaramp.")
-
-    if platform.system() == 'Windows':
-        print("    (3) Run lock_gamma_range.reg and restart PC.\n")
-    else:
-        print()
-
-    print("Don't forget to disable f.lux!")
-    print("Don't forget to disable Redshift!")
-    print("Don't forget to disable Windows Night Light!")
-    print("Don't forget to disable Xbox DVR/Game bar!\n")
-
-    print("Don't forget to set your preferred settings in settings.ini!\n")
-
-    try:
-        with App(path=app_path) as app:
-            print("Current settings:\n"
-                  "    mat_monitorgamma\t\t {:3.2f}   (Brightness)\n"
-                  "    mat_monitorgamma_tv_enabled\t {:d}      (Color Mode: "
-                  "Computer Monitor 0, Television 1)\n".format(
-                      app.mat_monitorgamma, app.mat_monitorgamma_tv_enabled))
-
-            print("PLEASE CLOSE THE APP WITH CTRL+C!\n")
-
-            app.run()
-    except:
-        traceback.print_exc()
-
-        print('\n')
-
-        if platform.system() == 'Windows':
-            print("  - Did you run unlock_gamma_range.reg and restart PC?")
-
-        print("  - Make sure your graphics card drivers are up to date.\n"
-              "  - Make sure your operating system is up to date.\n"
-              "  - Try disabling your integrated graphics card.")
-
-        sys.exit(1)
+        app.run()
