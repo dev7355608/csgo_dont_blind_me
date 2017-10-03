@@ -1,5 +1,6 @@
 import os
 import sys
+import urllib.request
 from aiohttp import web
 from configobj import ConfigObj, get_extra_values, flatten_errors
 from validate import Validator
@@ -164,7 +165,28 @@ if __name__ == '__main__':
 
     with App(path=app_path) as app:
         app.settings.write(sys.stdout.buffer)
+
         print('\n' + '-' * 80 + '\n')
+
+        with open(resource_path('VERSION'), encoding='utf-8') as f:
+            current_version = f.readline().strip()
+
+        try:
+            latest_version = ''
+            latest_version = urllib.request.urlopen(
+                'https://raw.githubusercontent.com/dev7355608/'
+                'csgo_dont_blind_me/master/VERSION', timeout=3).readline()
+            latest_version = latest_version.decode('utf-8').strip()
+        except:
+            pass
+
+        print('Current version:  {}'.format(current_version))
+        print('Latest version:   {}\n'.format(latest_version))
+
+        if latest_version and current_version != latest_version:
+            print('UPDATE AVAILABLE at '
+                  'github.com/dev7355608/csgo_dont_blind_me/releases!\n')
+
         print("PLEASE CLOSE THE APP WITH CTRL+C!\n")
 
         app.run()
