@@ -95,25 +95,64 @@ class App:
         self.mat_monitorgamma_tv_enabled = settings['Video Settings'].as_bool(
                 'mat_monitorgamma_tv_enabled')
 
+        self.temperature = [None, 6500]
+
+        self.round_phase = None
+        self.player_alive = None
+        self.player_flashed = [None, 0]
+
         self.context = Context.open()
 
     async def handle(self, request):
-        data = await request.json()
+        if request.method == 'GET':
+            ct = request.query.get('ct')
 
-        state = extract(data, 'player', 'state')
+            try:
+                r, g, b = ct.split(',')
+                r = float(r)
+                g = float(g)
+                b = float(b)
+                ct = (r, g, b)
+                assert r >= 0 and r <= 1.0
+                assert g >= 0 and g <= 1.0
+                assert b >= 0 and b <= 1.0
+            except:
+                try:
+                    ct = int(ct)
+                    assert ct >= 1000 and ct <= 25000
+                except:
+                    ct = self.temperature[1]
 
-        if state is None:
-            self.adjust_brightness(0)
+            self.temperature[1] = ct
         else:
-            flashed = state['flashed']
+            data = await request.json()
+            provider_id = extract(data, 'provider', 'steamid')
+            round_phase = extract(data, 'round', 'phase')
+            player_id = extract(data, 'player', 'steamid')
+            player_flashed = extract(data, 'player', 'state', 'flashes',
+                                     default=0)
 
-            if flashed != extract(data, 'previously', 'player', 'state',
-                                  'flashed', default=flashed):
-                self.adjust_brightness(flashed)
+            self.round_phase = round_phase
+            self.player_alive = player_id == provider_id
+            self.player_flashed[1] = player_flashed
 
+        self.update_brightness()
         return web.Response()
 
-    def adjust_brightness(self, flashed):
+    def update_brightness(self):
+        update = False
+
+        if not self.player_alive or self.round_phase not in ('live', 'over'):
+            update = self.temperature[0] != self.temperature[1]
+            self.temperature[0] = self.temperature[1]
+
+        if self.player_flashed[0] != self.player_flashed[1]:
+            update = True
+            self.player_flashed[0] = self.player_flashed[1]
+
+        if not update:
+            return
+
         if self.mat_monitorgamma_tv_enabled:
             gamma = self.mat_monitorgamma / 2.5
             minimum = 16 / 255
@@ -123,20 +162,22 @@ class App:
             minimum = 0.0
             maximum = 1.0
 
-        flashed = flashed / 255
+        flashed = self.player_flashed[0] / 255
         contrast = (1 - flashed) / (1 + flashed)
 
         ramp = generate_ramp(size=self.context.ramp_size, gamma=gamma,
                              contrast=contrast, minimum=minimum,
-                             maximum=maximum)
+                             maximum=maximum, temperature=self.temperature[0])
 
         self.context.set_ramp(ramp)
 
     def run(self):
-        self.adjust_brightness(0)
+        self.update_brightness()
 
         self.app = web.Application()
+        self.app.router.add_get('/', self.handle)
         self.app.router.add_post('/', self.handle)
+
         web.run_app(self.app, host=self.host, port=self.port)
 
     def close(self):
