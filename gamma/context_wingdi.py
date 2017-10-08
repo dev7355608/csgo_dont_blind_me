@@ -166,26 +166,36 @@ class WinGdiContext(Context):
     def close(self):
         try:
             with self._get_dc() as hdc:
-                cbName = DWORD(0)
+                ramp = None
 
-                GetICMProfile(hdc, byref(cbName), None)
+                try:
+                    cbName = DWORD(0)
 
-                filename = create_unicode_buffer(cbName.value)
+                    GetICMProfile(hdc, byref(cbName), None)
 
-                GetICMProfile(hdc, byref(cbName), filename)
+                    filename = create_unicode_buffer(cbName.value)
 
-                with open(filename.value, mode='rb') as f:
-                    icc_ramp = read_icc_ramp(f, size=256)
+                    GetICMProfile(hdc, byref(cbName), filename)
 
-                ramp = (WORD * 256 * 3)()
+                    with open(filename.value, mode='rb') as f:
+                        icc_ramp = read_icc_ramp(f, size=256)
 
-                for i in range(3):
-                    for j in range(256):
-                        ramp[i][j] = int(255 * icc_ramp[i][j] + 0.5) << 8
+                    ramp = (WORD * 256 * 3)()
 
-                if not SetDeviceGammaRamp(hdc, byref(ramp)):
-                    raise ContextError('Unable to restore gamma ramp') \
-                          from WinError()
+                    for i in range(3):
+                        for j in range(256):
+                            ramp[i][j] = int(255 * icc_ramp[i][j] + 0.5) << 8
+                finally:
+                    if ramp is None:
+                        ramp = (WORD * 256 * 3)()
+
+                        for i in range(3):
+                            for j in range(256):
+                                ramp[i][j] = j << 8
+
+                    if not SetDeviceGammaRamp(hdc, byref(ramp)):
+                        raise ContextError('Unable to restore gamma ramp') \
+                              from WinError()
         finally:
             if self._hdc is not None:
                 if not DeleteDC(self._hdc):

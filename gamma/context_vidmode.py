@@ -160,15 +160,20 @@ class VidModeContext(Context):
 
                 XFree(data)
 
-                icc_ramp = read_icc_ramp(profile, size=ramp_size)
+                try:
+                    icc_ramp = read_icc_ramp(profile, size=ramp_size)
 
-                for i in range(3):
-                    for j in range(ramp_size):
-                        ramp[i][j] = int(C_USHORT_MAX * icc_ramp[i][j])
+                    for i in range(3):
+                        for j in range(ramp_size):
+                            ramp[i][j] = int(C_USHORT_MAX * icc_ramp[i][j])
+                except:
+                    for i in range(3):
+                        for j in range(ramp_size):
+                            ramp[i][j] = C_USHORT_MAX * j // 255
             else:
                 for i in range(3):
                     for j in range(ramp_size):
-                        ramp[i][j] = C_USHORT_MAX * i // 255
+                        ramp[i][j] = C_USHORT_MAX * j // 255
 
             gamma_r = byref(ramp, 0 * ramp_size * C_USHORT_SIZE)
             gamma_g = byref(ramp, 1 * ramp_size * C_USHORT_SIZE)
