@@ -20,7 +20,10 @@ def generate_ramp(size=256, gamma=1.0, brightness=0.0, contrast=1.0,
     if not isinstance(maximum, (tuple, list)):
         maximum = (maximum, maximum, maximum)
 
-    whitepoint = to_whitepoint(temperature)
+    if not isinstance(temperature, (tuple, list)):
+        whitepoint = to_whitepoint(temperature)
+    else:
+        whitepoint = temperature
 
     ramp = ([0] * size, [0] * size, [0] * size)
 
