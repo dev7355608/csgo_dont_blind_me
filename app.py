@@ -1,11 +1,13 @@
 import os
+import platform
+import subprocess
 import sys
 import urllib.request
 from aiohttp import web
 from configobj import ConfigObj, get_extra_values, flatten_errors
+from gamma import Context, generate_ramp
 from hook import Hook
 from validate import is_boolean, Validator
-from gamma import Context, generate_ramp
 
 
 def extract(data, *keys, default=None):
@@ -228,6 +230,8 @@ if __name__ == '__main__':
     elif __file__:
         app_path = os.path.dirname(__file__)
 
+    app_path = os.path.realpath(app_path)
+
     print('# csgo_dont_blind_me\n')
     print('-' * 80 + '\n')
 
@@ -260,7 +264,30 @@ if __name__ == '__main__':
             print('UPDATE AVAILABLE at '
                   'github.com/dev7355608/csgo_dont_blind_me/releases!\n')
 
+        if platform.system() == 'Linux':
+            print('If the screen brightness is not restored properly after '
+                  'exit, specify\nin atexit.sh how reset your screen '
+                  'calibration.\n')
+
+            atexit = os.path.join(app_path, 'atexit.sh')
+
+            if not os.path.isfile(atexit):
+                with open(atexit, mode='w') as f:
+                    f.write('#!/bin/bash\n')
+                    f.write('# This script is executed when the app exits.\n')
+                    f.write('#\n')
+                    f.write('# Examples\n')
+                    f.write('# xcalib -display $DISPLAY -screen 0 '
+                            '~/path/to/profile.icc\n')
+                    f.write('# xrandr --output DVI-0 --gamma 0.9:0.9:0.9\n')
+
+                os.chmod(atexit, 0o755)
+
         print("PLEASE CLOSE THE APP WITH CTRL+C!\n")
 
-        with Hook(app, enable=app.enable_hook):
-            app.run()
+        try:
+            with Hook(app, enable=app.enable_hook):
+                app.run()
+        finally:
+            if platform.system() == 'Linux':
+                subprocess.check_call([atexit])

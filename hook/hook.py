@@ -3,9 +3,9 @@ import platform
 import struct
 import subprocess
 from ctypes import create_string_buffer, byref, sizeof, Structure
-from ctypes.wintypes import WCHAR, WORD
 
 if platform.system() == 'Windows':
+    from ctypes.wintypes import WCHAR, WORD
     from .inject import Process
 
 __all__ = ['Hook']
