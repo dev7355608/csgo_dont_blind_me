@@ -1,0 +1,6 @@
+LIBRARY hook32.dll
+
+EXPORTS
+Hook
+HookStart
+HookStop

@@ -11,8 +11,8 @@
 4. Run `unlock_gamma_range.reg` and restart PC. (Windows only)
 5. Set your preferred `mat_monitorgamma` and `mat_monitorgamma_tv_enabled`
    in `settings.ini`.
-6. Make sure to disable f.lux and Redshift while the app is running!
-   It is compatible with Windows Night Light though.
+6. The app has a compatibility mode for f.lux (see settings) and runs perfectly
+   with Windows Night Light. Redshift must be disabled though!
 
 
 ## Uninstall

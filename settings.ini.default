@@ -1,3 +1,11 @@
+[Don't Blind Me!]
+# f.lux Compatibility Mode
+# Only works when the app is started after f.lux!
+# If it set to off, f.lux must be disabled while the app is running.
+flux_compatibility_mode = boolean(default=on)
+# This option disabled f.lux. Only works in compatibility mode.
+flux_disable = boolean(default=yes)
+
 [Video Settings]
 # Brightness (min. 1.6; max. 2.6)
 mat_monitorgamma = float(1.6, 2.6, default=2.0)

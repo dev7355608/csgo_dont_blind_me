@@ -9,4 +9,7 @@ move /Y dist\app.exe dist\csgo_dont_blind_me
 copy INSTALL.txt dist\csgo_dont_blind_me
 copy lock_gamma_range.reg dist\csgo_dont_blind_me
 copy unlock_gamma_range.reg dist\csgo_dont_blind_me
+mkdir dist\csgo_dont_blind_me\hook
+copy hook\hook32.dll dist\csgo_dont_blind_me\hook
+copy hook\hook64.dll dist\csgo_dont_blind_me\hook
 cd /D %_CD%

@@ -3,7 +3,8 @@ import sys
 import urllib.request
 from aiohttp import web
 from configobj import ConfigObj, get_extra_values, flatten_errors
-from validate import Validator
+from hook import Hook
+from validate import is_boolean, Validator
 from gamma import Context, generate_ramp
 
 
@@ -34,6 +35,9 @@ class App:
 
         res_path = resource_path()
 
+        self.path = path
+        self.resource_path = res_path
+
         settings_path = os.path.join(path, 'settings.ini')
         default_settings_path = os.path.join(res_path, 'settings.ini.default')
 
@@ -42,7 +46,18 @@ class App:
                              encoding='utf-8')
         settings.filename = settings_path
 
-        validator = Validator()
+        class Boolean:
+            def __init__(self, value):
+                self._str = value
+                self._bool = is_boolean(value)
+
+            def __bool__(self):
+                return self._bool
+
+            def __str__(self):
+                return self._str
+
+        validator = Validator(dict(boolean=lambda x: Boolean(x)))
         result = settings.validate(validator, preserve_errors=True, copy=True)
 
         for sections, key in get_extra_values(settings):
@@ -74,6 +89,10 @@ class App:
 
         self.settings = settings
 
+        self.enable_hook = \
+            settings["Don't Blind Me!"]['flux_compatibility_mode']
+        self.ignore_temperature = settings["Don't Blind Me!"]['flux_disable']
+
         self.host = settings['Game State Integration']['host']
         self.port = settings['Game State Integration'].as_int('port')
 
@@ -97,7 +116,7 @@ class App:
 
         self.temperature = [None, 6500]
 
-        self.round_phase = None
+        self.round_phase = [None, None]
         self.player_alive = None
         self.player_flashed = [None, 0]
 
@@ -105,34 +124,36 @@ class App:
 
     async def handle(self, request):
         if request.method == 'GET':
-            ct = request.query.get('ct')
+            if not self.ignore_temperature:
+                ct = request.query.get('ct')
 
-            try:
-                r, g, b = ct.split(',')
-                r = float(r)
-                g = float(g)
-                b = float(b)
-                ct = (r, g, b)
-                assert r >= 0 and r <= 1.0
-                assert g >= 0 and g <= 1.0
-                assert b >= 0 and b <= 1.0
-            except:
                 try:
-                    ct = int(ct)
-                    assert ct >= 1000 and ct <= 25000
+                    r, g, b = ct.split(',')
+                    r = float(r)
+                    g = float(g)
+                    b = float(b)
+                    ct = (r, g, b)
+                    assert r >= 0 and r <= 1.0
+                    assert g >= 0 and g <= 1.0
+                    assert b >= 0 and b <= 1.0
                 except:
-                    ct = self.temperature[1]
+                    try:
+                        ct = int(ct)
+                        assert ct >= 1000 and ct <= 25000
+                    except:
+                        ct = self.temperature[1]
 
-            self.temperature[1] = ct
+                self.temperature[1] = ct
         else:
             data = await request.json()
+
             provider_id = extract(data, 'provider', 'steamid')
             round_phase = extract(data, 'round', 'phase')
             player_id = extract(data, 'player', 'steamid')
-            player_flashed = extract(data, 'player', 'state', 'flashes',
+            player_flashed = extract(data, 'player', 'state', 'flashed',
                                      default=0)
 
-            self.round_phase = round_phase
+            self.round_phase[1] = round_phase
             self.player_alive = player_id == provider_id
             self.player_flashed[1] = player_flashed
 
@@ -142,7 +163,12 @@ class App:
     def update_brightness(self):
         update = False
 
-        if not self.player_alive or self.round_phase not in ('live', 'over'):
+        if self.round_phase[0] != self.round_phase[1]:
+            update = True
+            self.round_phase[0] = self.round_phase[1]
+
+        if not self.player_alive or self.round_phase[0] not in ('live',
+                                                                'over'):
             update = self.temperature[0] != self.temperature[1]
             self.temperature[0] = self.temperature[1]
 
@@ -153,12 +179,17 @@ class App:
         if not update:
             return
 
-        if self.mat_monitorgamma_tv_enabled:
-            gamma = self.mat_monitorgamma / 2.5
-            minimum = 16 / 255
-            maximum = 235 / 255
+        if self.round_phase[0] is not None:
+            if self.mat_monitorgamma_tv_enabled:
+                gamma = self.mat_monitorgamma / 2.5
+                minimum = 16 / 255
+                maximum = 235 / 255
+            else:
+                gamma = self.mat_monitorgamma / 2.2
+                minimum = 0.0
+                maximum = 1.0
         else:
-            gamma = self.mat_monitorgamma / 2.2
+            gamma = 1.0
             minimum = 0.0
             maximum = 1.0
 
@@ -172,7 +203,8 @@ class App:
         self.context.set_ramp(ramp)
 
     def run(self):
-        self.update_brightness()
+        if self.ignore_temperature:
+            self.update_brightness()
 
         self.app = web.Application()
         self.app.router.add_get('/', self.handle)
@@ -230,4 +262,5 @@ if __name__ == '__main__':
 
         print("PLEASE CLOSE THE APP WITH CTRL+C!\n")
 
-        app.run()
+        with Hook(app, enable=app.enable_hook):
+            app.run()
