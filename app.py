@@ -91,6 +91,8 @@ class App:
 
         self.settings = settings
 
+        self.black_flash = settings["Don't Blind Me!"]['black_flash']
+        self.black_smoke = settings["Don't Blind Me!"]['black_smoke']
         self.enable_hook = \
             settings["Don't Blind Me!"]['flux_compatibility_mode']
         self.ignore_temperature = settings["Don't Blind Me!"]['flux_disable']
@@ -121,6 +123,7 @@ class App:
         self.round_phase = [None, None]
         self.player_alive = None
         self.player_flashed = [None, 0]
+        self.player_smoked = [None, 0]
 
         self.context = Context.open()
 
@@ -154,10 +157,13 @@ class App:
             player_id = extract(data, 'player', 'steamid')
             player_flashed = extract(data, 'player', 'state', 'flashed',
                                      default=0)
+            player_smoked = extract(data, 'player', 'state', 'smoked',
+                                    default=0)
 
             self.round_phase[1] = round_phase
             self.player_alive = player_id == provider_id
             self.player_flashed[1] = player_flashed
+            self.player_smoked[1] = player_smoked
 
         self.update_brightness()
         return web.Response()
@@ -175,8 +181,12 @@ class App:
             self.temperature[0] = self.temperature[1]
 
         if self.player_flashed[0] != self.player_flashed[1]:
-            update = True
+            update = self.black_flash
             self.player_flashed[0] = self.player_flashed[1]
+
+        if self.player_smoked[0] != self.player_smoked[1]:
+            update = self.black_smoke
+            self.player_smoked[0] = self.player_smoked[1]
 
         if not update:
             return
@@ -195,8 +205,17 @@ class App:
             minimum = 0.0
             maximum = 1.0
 
-        flashed = self.player_flashed[0] / 255
-        contrast = (1 - flashed) / (1 + flashed)
+        if self.black_flash:
+            flashed = self.player_flashed[0] / 255
+        else:
+            flashed = 0
+
+        if self.black_smoke:
+            smoked = self.player_smoked[0] / 255
+        else:
+            smoked = 0
+
+        contrast = (0.25 + 0.75 * (1 - smoked)) * (1 - flashed) / (1 + flashed)
 
         ramp = generate_ramp(size=self.context.ramp_size, gamma=gamma,
                              contrast=contrast, minimum=minimum,
@@ -259,6 +278,10 @@ if __name__ == '__main__':
 
         print('Current version:  {}'.format(current_version))
         print('Latest version:   {}\n'.format(latest_version))
+
+        print('You can reuse your old settings.ini after an update, but you '
+              'have to make sure\nthat gamestate_integration_dont_blind_me.cfg'
+              ' in your cfg folder is up-to-date!\n')
 
         if latest_version and current_version != latest_version:
             print('UPDATE AVAILABLE at '
