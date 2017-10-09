@@ -1,3 +1,4 @@
+import atexit
 import os
 import platform
 import subprocess
@@ -292,25 +293,28 @@ if __name__ == '__main__':
                   'exit, specify\nin atexit.sh how reset your screen '
                   'calibration.\n')
 
-            atexit = os.path.join(app_path, 'atexit.sh')
+            atexit_sh = os.path.join(app_path, 'atexit.sh')
 
-            if not os.path.isfile(atexit):
-                with open(atexit, mode='w') as f:
+            if not os.path.isfile(atexit_sh):
+                with open(atexit_sh, mode='w') as f:
                     f.write('#!/bin/bash\n')
                     f.write('# This script is executed when the app exits.\n')
                     f.write('#\n')
-                    f.write('# Examples\n')
+                    f.write('# Examples:\n')
+                    f.write('# xgamma -gamma 1.0\n')
                     f.write('# xcalib -display $DISPLAY -screen 0 '
                             '~/path/to/profile.icc\n')
-                    f.write('# xrandr --output DVI-0 --gamma 0.9:0.9:0.9\n')
+                    f.write('# xrandr --output DVI-0 --gamma 1.0:1.0:1.0\n')
 
-                os.chmod(atexit, 0o755)
+                os.chmod(atexit_sh, 0o755)
+
+            def call_atexit_sh():
+                if platform.system() == 'Linux':
+                    subprocess.check_call([atexit_sh])
+
+            atexit.register(call_atexit_sh)
 
         print("PLEASE CLOSE THE APP WITH CTRL+C!\n")
 
-        try:
-            with Hook(app, enable=app.enable_hook):
-                app.run()
-        finally:
-            if platform.system() == 'Linux':
-                subprocess.check_call([atexit])
+        with Hook(app, enable=app.enable_hook):
+            app.run()
