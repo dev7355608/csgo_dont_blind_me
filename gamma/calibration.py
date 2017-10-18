@@ -183,7 +183,9 @@ def read_icc_ramp(file_or_bytes, size=256, system=None):
             b_ramp = [array[i + 512] / 65535 for i in range(256)]
 
             ramp = (r_ramp, g_ramp, b_ramp)
-        elif tag_name == VCGT:
+            break
+
+        if tag_name == VCGT:
             fp.seek(tag_offset)
 
             tag_type, _, gamma_type = unpack('III', fp)
@@ -234,6 +236,7 @@ def read_icc_ramp(file_or_bytes, size=256, system=None):
                           + b_min for i in range(size)]
 
             ramp = (r_ramp, g_ramp, b_ramp)
+            break
 
     if ramp is None:
         ramp = [[i / (size - 1) for i in range(size)] for _ in range(3)]

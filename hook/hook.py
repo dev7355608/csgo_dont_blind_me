@@ -1,102 +1,181 @@
 import os
-import platform
 import struct
 import subprocess
-from ctypes import create_string_buffer, byref, sizeof, Structure
-
-if platform.system() == 'Windows':
-    from ctypes.wintypes import WCHAR, WORD
-    from .inject import Process
-
-__all__ = ['Hook']
+import sys
+from ctypes import byref, sizeof, Structure
+from argparse import ArgumentParser, ArgumentTypeError
+from ctypes.wintypes import WCHAR, WORD
+from inject import Process
 
 
-class Hook:
-    def __init__(self, app, enable=True):
-        self.enable = enable
+FIND_PROCESS = '''& {
+Param([string]$name, [string]$path, [string]$thumbprint);
 
-        if enable and platform.system() == 'Windows':
-            flux = subprocess.call(['PowerShell', '-Command', '''& {
-                Foreach ($p in Get-Process) {
-                    if ($p.Name -Eq "flux") {
-                        $s = Get-AuthenticodeSignature -File $p.Path;
-                        If ($s.Status -Eq "Valid" -And
-                            $s.SignerCertificate.Thumbprint -Eq
-                            "36E504701938FEA480DB816490D6EAE042EB7907") {
-                            Exit $p.Id; } } } Exit 0; }'''])
+if ($path) {
+    if (-Not [System.IO.Path]::IsPathRooted($path)) {
+        $path = Join-Path (pwd) $path;
+    }
+    $path = [System.IO.Path]::GetFullPath($path);
+}
 
-            if not flux:
-                flux = None
+Foreach ($process in Get-Process) {
+    If (-Not $name -Or $process.Name -Eq $name) {
+        If (-Not $path -Or $process.Path -Eq $path) {
+            If (-Not $thumbprint) {
+                Exit $process.Id;
+            }
+
+            $signature = Get-AuthenticodeSignature -File $process.Path;
+
+            If ($signature.Status -Eq 'Valid' -And
+                $signature.SignerCertificate.Thumbprint -Eq $thumbprint) {
+                Exit $process.Id;
+            }
+        }
+    }
+}
+Exit 0;
+}'''
+
+
+def process_type(s):
+    s = s.strip()
+
+    try:
+        pid = int(s)
+    except:
+        try:
+            name, path, thumbprint = s.split(':')
+        except:
+            raise ArgumentTypeError('invalid process descriptor: '
+                                    'expected name:path:thumbprint')
+
+        cmd = ['PowerShell', '-Command', FIND_PROCESS]
+
+        if name:
+            cmd += ['-Name', name]
+
+        if path:
+            cmd += ['-Path', path]
+
+        if thumbprint:
+            cmd += ['-Thumbprint', thumbprint]
+
+        pid = subprocess.call(cmd)
+
+        if pid == 0:
+            raise ArgumentTypeError('process not found')
+
+    if not (pid > 0 and pid <= 2**32-1):
+        raise ArgumentTypeError('invalid process ID')
+
+    try:
+        process = Process(pid)
+    except:
+        raise ArgumentTypeError('unable to open process')
+
+    return process
+
+
+def ip_address_type(s):
+    ip_address = s.strip()
+    digits = ip_address.split('.')
+
+    if not (len(digits) == 4 and all(x.isdigit() and int(x) >= 0 and
+            int(x) <= 255 for x in digits)):
+        raise ArgumentTypeError('malformed IP address')
+
+    return ip_address
+
+
+def port_type(s):
+    try:
+        port = int(s)
+    except:
+        raise ArgumentTypeError('malformed port')
+
+    if not (port >= 0 and port <= 65535):
+        raise ArgumentTypeError('invalid port')
+
+    return port
+
+
+if __name__ == '__main__':
+    if getattr(sys, 'frozen', False):
+        path = os.path.dirname(sys.executable)
+    elif __file__:
+        path = os.path.dirname(__file__)
+
+    parser = ArgumentParser(prog='hook')
+    parser.add_argument('command', choices=('start', 'stop'))
+
+    args = parser.parse_args(sys.argv[1:2])
+
+    if args.command == 'start':
+        parser = ArgumentParser(prog='hook start')
+        parser.add_argument('process', type=process_type)
+        parser.add_argument('--host', type=ip_address_type, required=True)
+        parser.add_argument('--port', type=port_type, required=True)
+
+        args = parser.parse_args(sys.argv[2:])
+
+        process = args.process
+        host = args.host
+        port = args.port
+
+        try:
+            hook_path = os.path.join(path, 'hook{}.dll'.format(process.bits))
+
+            hook = process.get_module(hook_path)
+
+            if hook is None:
+                hook = process.inject_module(hook_path, auto_eject=False)
+
+            hook_addr = hook.get_proc_address('Hook')
+
+            if process.bits == 64:
+                patch = b'\x48\xB8' + struct.pack('<Q', hook_addr.value)
             else:
-                flux = Process(flux)
+                patch = b'\xB8' + struct.pack('<L', hook_addr.value)
 
-                try:
-                    hook_path = os.path.join(
-                            app.path, 'hook/hook{}.dll'.format(flux.bits))
+            patch += b'\xFF\xE0'
 
-                    flux_hook = flux.get_module(hook_path)
+            process.write_memory(
+                    process.get_module(name='gdi32').
+                    get_proc_address('SetDeviceGammaRamp'), patch, len(patch))
 
-                    if flux_hook is None:
-                        flux_hook = flux.inject_module(hook_path,
-                                                       auto_eject=False)
+            class HookParam(Structure):
+                _fields_ = [('serverName', WCHAR * 16),
+                            ('serverPort', WORD)]
 
-                    class HookParam(Structure):
-                        _fields_ = [('serverName', WCHAR * 16),
-                                    ('serverPort', WORD)]
+            hook_param = HookParam()
+            hook_param.serverName = host
+            hook_param.serverPort = port
 
-                    hook_param = HookParam()
-                    hook_param.serverName = app.host[:15]
-                    hook_param.serverPort = app.port
+            with process.alloc_memory(sizeof(hook_param)) as param:
+                param.write(byref(hook_param), sizeof(hook_param))
 
-                    with flux.alloc_memory(sizeof(hook_param)) as param:
-                        param.write(byref(hook_param), sizeof(hook_param))
+                if not hook.call_proc('HookStart', param.address):
+                    raise RuntimeError('Failed to start hook')
+        finally:
+            process.close()
+    elif args.command == 'stop':
+        parser = ArgumentParser(prog='hook stop')
+        parser.add_argument('process', type=process_type)
 
-                        if not flux_hook.call_proc('HookStart', param.address):
-                            raise RuntimeError('Failed to start hook')
+        args = parser.parse_args(sys.argv[2:])
 
-                    hook_addr = flux_hook.get_proc_address('Hook')
-                    flux_addr = flux.get_module(name='gdi32'). \
-                        get_proc_address('SetDeviceGammaRamp')
+        process = args.process
 
-                    if flux.bits == 64:
-                        patched = b'\x48\xB8' + struct.pack('<Q',
-                                                            hook_addr.value)
-                    else:
-                        patched = b'\xB8' + struct.pack('<L', hook_addr.value)
+        try:
+            hook_path = os.path.join(path, 'hook{}.dll'.format(process.bits))
 
-                    patched += b'\xFF\xE0'
-                    unpatched = create_string_buffer(len(patched))
+            hook = process.get_module(hook_path)
 
-                    flux.read_memory(flux_addr, unpatched, len(unpatched))
-                    flux.write_memory(flux_addr, patched, len(patched))
-
-                    self.flux_hook = flux_hook
-                    self.flux_addr = flux_addr
-                    self.flux_unpatched = unpatched.raw
-                except:
-                    flux.close()
-                    raise
-
-            self.flux = flux
-
-    def unhook(self):
-        if self.enable and platform.system() == 'Windows' and self.flux:
-
-            try:
-                if self.flux.is_still_alive():
-                    if self.flux_hook:
-                        try:
-                            self.flux.write_memory(self.flux_addr,
-                                                   self.flux_unpatched,
-                                                   len(self.flux_unpatched))
-                        finally:
-                            if not self.flux_hook.call_proc('HookStop'):
-                                raise RuntimeError('Failed to stop hook')
-            finally:
-                self.flux.close()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, type, value, traceback):
-        self.unhook()
+            if hook is not None:
+                if not hook.call_proc('HookStop'):
+                    raise RuntimeError('Failed to stop hook')
+        finally:
+            process.close()
+    else:
+        assert False

@@ -7,7 +7,6 @@ import urllib.request
 from aiohttp import web
 from configobj import ConfigObj, get_extra_values, flatten_errors
 from gamma import Context, generate_ramp
-from hook import Hook
 from validate import is_boolean, Validator
 
 
@@ -169,8 +168,8 @@ class App:
         self.update_brightness()
         return web.Response()
 
-    def update_brightness(self):
-        update = False
+    def update_brightness(self, force=False):
+        update = force
 
         if self.round_phase[0] != self.round_phase[1]:
             update = True
@@ -178,15 +177,15 @@ class App:
 
         if not self.player_alive or self.round_phase[0] not in ('live',
                                                                 'over'):
-            update = self.temperature[0] != self.temperature[1]
+            update = update or self.temperature[0] != self.temperature[1]
             self.temperature[0] = self.temperature[1]
 
         if self.player_flashed[0] != self.player_flashed[1]:
-            update = self.black_flash
+            update = update or self.black_flash
             self.player_flashed[0] = self.player_flashed[1]
 
         if self.player_smoked[0] != self.player_smoked[1]:
-            update = self.black_smoke
+            update = update or self.black_smoke
             self.player_smoked[0] = self.player_smoked[1]
 
         if not update:
@@ -225,8 +224,7 @@ class App:
         self.context.set_ramp(ramp)
 
     def run(self):
-        if self.ignore_temperature:
-            self.update_brightness()
+        self.update_brightness(force=True)
 
         self.app = web.Application()
         self.app.router.add_get('/', self.handle)
@@ -316,5 +314,26 @@ if __name__ == '__main__':
 
         print("PLEASE CLOSE THE APP WITH CTRL+C!\n")
 
-        with Hook(app, enable=app.enable_hook):
-            app.run()
+        if platform.system() == 'Windows' and app.enable_hook:
+            process = 'flux::36E504701938FEA480DB816490D6EAE042EB7907'
+
+            if getattr(sys, 'frozen', False):
+                hook = [os.path.join(app.path, 'hook', 'hook.exe')]
+            else:
+                hook = [sys.executable, os.path.join(app.path, 'hook',
+                                                     'hook.py')]
+        else:
+            hook = None
+
+        with open(os.path.join(app_path, 'error.log'), 'w') as f:
+            try:
+                if hook and process:
+                    subprocess.run(hook + ['start', process, '--host',
+                                           app.host, '--port', str(app.port)],
+                                   stdout=f, stderr=subprocess.STDOUT)
+
+                app.run()
+            finally:
+                if hook and process:
+                    subprocess.run(hook + ['stop', process], stdout=f,
+                                   stderr=subprocess.STDOUT)

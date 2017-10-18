@@ -12,62 +12,66 @@ typedef struct HookParam {
   INTERNET_PORT serverPort;
 } HookParam;
 
-static HANDLE mutex;
+static BOOL bRunning;
+static HANDLE hMutex;
 static WCHAR serverName[SERVER_NAME_SIZE];
 static INTERNET_PORT serverPort;
 static HINTERNET hSession;
 static HINTERNET hConnect;
 
+static void(WINAPI *GdiSetLastError)(DWORD dwErrCode);
+static BOOL(WINAPI *NtGdiSetDeviceGammaRamp)(HDC hDC, LPVOID lpRamp);
+
 BOOL WINAPI Hook(HDC hDC, LPVOID lpRamp) {
-  if (GetObjectType(hDC) != OBJ_DC)
-    return SetDeviceGammaRamp(hDC, lpRamp);
+  BOOL bResult = FALSE;
+  WORD temperature[] = {((WORD *)lpRamp)[255], ((WORD *)lpRamp)[511],
+                        ((WORD *)lpRamp)[767]};
 
-  if (WaitForSingleObject(mutex, INFINITE) != WAIT_OBJECT_0)
-    return TRUE;
+  if (WaitForSingleObject(hMutex, INFINITE) != WAIT_OBJECT_0)
+    return FALSE;
 
-  ULONGLONG start = GetTickCount64();
+  if (!bRunning || GetObjectType(hDC) != OBJ_DC) {
+    if (lpRamp == NULL) {
+      GdiSetLastError(ERROR_INVALID_PARAMETER);
+      bResult = FALSE;
+    } else {
+      bResult = NtGdiSetDeviceGammaRamp(hDC, lpRamp);
+    }
+  } else {
+    HINTERNET hRequest = NULL;
 
-  if (!hConnect && hSession)
-    hConnect = WinHttpConnect(hSession, serverName, serverPort, 0);
+    if (hConnect) {
+      double r = temperature[0] / 65535.0;
+      double g = temperature[1] / 65535.0;
+      double b = temperature[2] / 65535.0;
 
-  HINTERNET hRequest = NULL;
+      WCHAR objectName[32];
+      swprintf(objectName, 32, L"/?ct=%#.6f,%#.6f,%#.6f", r, g, b);
 
-  if (hConnect) {
-    double r = ((WORD *)lpRamp)[255] / 65535.0;
-    double g = ((WORD *)lpRamp)[511] / 65535.0;
-    double b = ((WORD *)lpRamp)[767] / 65535.0;
+      hRequest = WinHttpOpenRequest(hConnect, NULL, objectName, NULL,
+                                    WINHTTP_NO_REFERER,
+                                    WINHTTP_DEFAULT_ACCEPT_TYPES, 0);
+    }
 
-    WCHAR objectName[32];
-    swprintf(objectName, 32, L"/?ct=%#.6f,%#.6f,%#.6f", r, g, b);
+    if (hRequest)
+      bResult = WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
+                                   WINHTTP_NO_REQUEST_DATA, 0, 0, 0);
 
-    hRequest =
-        WinHttpOpenRequest(hConnect, NULL, objectName, NULL, WINHTTP_NO_REFERER,
-                           WINHTTP_DEFAULT_ACCEPT_TYPES, 0);
+    if (bResult)
+      WinHttpReceiveResponse(hRequest, NULL);
+
+    if (hRequest)
+      WinHttpCloseHandle(hRequest);
+
+    bResult = TRUE;
   }
 
-  BOOL bResults = FALSE;
-
-  if (hRequest)
-    bResults = WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
-                                  WINHTTP_NO_REQUEST_DATA, 0, 0, 0);
-
-  if (bResults)
-    WinHttpReceiveResponse(hRequest, NULL);
-
-  if (hRequest)
-    WinHttpCloseHandle(hRequest);
-
-  ULONGLONG delta = GetTickCount64() - start;
-
-  if (delta < 5)
-    Sleep((DWORD)(5 - delta));
-
-  ReleaseMutex(mutex);
-  return TRUE;
+  ReleaseMutex(hMutex);
+  return bResult;
 }
 
 DWORD HookStop(LPVOID lpParameter) {
-  if (WaitForSingleObject(mutex, INFINITE) != WAIT_OBJECT_0)
+  if (WaitForSingleObject(hMutex, INFINITE) != WAIT_OBJECT_0)
     return FALSE;
 
   if (hConnect && WinHttpCloseHandle(hConnect))
@@ -76,20 +80,20 @@ DWORD HookStop(LPVOID lpParameter) {
   if (!hConnect && hSession && WinHttpCloseHandle(hSession))
     hSession = NULL;
 
-  BOOL result = !hConnect && !hSession;
-
-  ReleaseMutex(mutex);
-  return result;
+  BOOL bResult = !hConnect && !hSession;
+  bRunning = !bResult;
+  ReleaseMutex(hMutex);
+  return bResult;
 }
 
 DWORD HookStart(LPVOID lpParameter) {
   if (!HookStop(NULL))
     return FALSE;
 
-  if (WaitForSingleObject(mutex, INFINITE) != WAIT_OBJECT_0)
+  if (WaitForSingleObject(hMutex, INFINITE) != WAIT_OBJECT_0)
     return FALSE;
 
-  BOOL result = FALSE;
+  BOOL bResult = FALSE;
 
   if (!hSession) {
     HookParam *param = lpParameter;
@@ -99,24 +103,32 @@ DWORD HookStart(LPVOID lpParameter) {
 
     hSession = WinHttpOpen(NULL, WINHTTP_ACCESS_TYPE_NO_PROXY,
                            WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-
-    if (hSession) {
-        WinHttpSetTimeouts(hSession, 1000, 250, 50, 50);
-    }
-
-    result = hSession != NULL;
   }
 
-  ReleaseMutex(mutex);
-  return result;
+  if (hSession)
+    WinHttpSetTimeouts(hSession, 1000, 1000, 1000, 1000);
+
+  if (hSession && !hConnect)
+    hConnect = WinHttpConnect(hSession, serverName, serverPort, 0);
+
+  bResult = hConnect != NULL;
+  bRunning = bResult;
+  ReleaseMutex(hMutex);
+  return bResult;
 }
 
 BOOL APIENTRY DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
   switch (fdwReason) {
   case DLL_PROCESS_ATTACH:
-    mutex = CreateMutex(NULL, FALSE, NULL);
+    GdiSetLastError = (void(WINAPI *)(DWORD))GetProcAddress(
+        GetModuleHandle(TEXT("gdi32")), "GdiSetLastError");
+    NtGdiSetDeviceGammaRamp = (BOOL(WINAPI *)(HDC, LPVOID))GetProcAddress(
+        GetModuleHandle(TEXT("win32u")), "NtGdiSetDeviceGammaRamp");
 
-    if (!mutex)
+    bRunning = FALSE;
+    hMutex = CreateMutex(NULL, FALSE, NULL);
+
+    if (!hMutex)
       return FALSE;
 
     memset(serverName, 0, sizeof(serverName));
@@ -126,7 +138,7 @@ BOOL APIENTRY DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
     break;
   case DLL_PROCESS_DETACH:
     HookStop(NULL);
-    CloseHandle(mutex);
+    CloseHandle(hMutex);
     break;
   }
 

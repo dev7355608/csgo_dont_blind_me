@@ -1,4 +1,5 @@
 /build
+/hook.exe
 /hook32.dll
 /hook32.lib
 /hook64.dll
