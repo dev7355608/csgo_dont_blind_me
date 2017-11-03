@@ -2,10 +2,10 @@ from contextlib import contextmanager
 from ctypes import byref, sizeof, Structure, windll, WinError
 from ctypes import create_unicode_buffer, POINTER
 from ctypes.wintypes import DWORD, HDC, WCHAR, WORD
-from winreg import HKEY_LOCAL_MACHINE, OpenKey, CloseKey, QueryValueEx
+from winreg import (HKEY_LOCAL_MACHINE, OpenKeyEx, CloseKey, QueryValueEx,
+                    KEY_READ, KEY_WOW64_64KEY)
 from .calibration import read_icc_ramp
 from .context import Context, ContextError
-
 
 __all__ = ['Context']
 
@@ -105,7 +105,9 @@ class WinGdiContext(Context):
 
             try:
                 key = None
-                key = OpenKey(HKEY_LOCAL_MACHINE, ICM_KEY)
+                key = OpenKeyEx(HKEY_LOCAL_MACHINE, ICM_KEY, access=KEY_READ |
+                                KEY_WOW64_64KEY)
+                gamma_range = None
                 gamma_range = QueryValueEx(key, 'GdiIcmGammaRange')[0]
             except FileNotFoundError:
                 gamma_range = None
