@@ -1,6 +1,0 @@
-LIBRARY hook64.dll
-
-EXPORTS
-Hook
-HookStart
-HookStop

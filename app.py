@@ -93,9 +93,7 @@ class App:
 
         self.black_flash = settings["Don't Blind Me!"]['black_flash']
         self.black_smoke = settings["Don't Blind Me!"]['black_smoke']
-        self.enable_hook = \
-            settings["Don't Blind Me!"]['flux_compatibility_mode']
-        self.ignore_temperature = settings["Don't Blind Me!"]['flux_disable']
+        self.ignore_temperature = False
 
         self.host = settings['Game State Integration']['host']
         self.port = settings['Game State Integration'].as_int('port')
@@ -314,26 +312,4 @@ if __name__ == '__main__':
 
         print("PLEASE CLOSE THE APP WITH CTRL+C!\n")
 
-        if platform.system() == 'Windows' and app.enable_hook:
-            process = 'flux::36E504701938FEA480DB816490D6EAE042EB7907'
-
-            if getattr(sys, 'frozen', False):
-                hook = [os.path.join(app.path, 'hook', 'hook.exe')]
-            else:
-                hook = [sys.executable, os.path.join(app.path, 'hook',
-                                                     'hook.py')]
-        else:
-            hook = None
-
-        with open(os.path.join(app_path, 'error.log'), 'w') as f:
-            try:
-                if hook and process:
-                    subprocess.run(hook + ['start', process, '--host',
-                                           app.host, '--port', str(app.port)],
-                                   stdout=f, stderr=subprocess.STDOUT)
-
-                app.run()
-            finally:
-                if hook and process:
-                    subprocess.run(hook + ['stop', process], stdout=f,
-                                   stderr=subprocess.STDOUT)
+        app.run()
