@@ -1,3 +1,4 @@
+import asyncio
 import atexit
 import os
 import platform
@@ -255,6 +256,12 @@ if __name__ == '__main__':
         print(f.read())
 
     print('-' * 80 + '\n')
+
+    def wakeup():
+        loop.call_later(1.0, wakeup)
+
+    loop = asyncio.get_event_loop()
+    loop.call_later(1.0, wakeup)
 
     with App(path=app_path) as app:
         app.settings.write(sys.stdout.buffer)
