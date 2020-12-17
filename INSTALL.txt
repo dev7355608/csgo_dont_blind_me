@@ -9,9 +9,11 @@
      2. Right click on CS:GO and go to properties.
      3. Click *Set launch options...* and add `-nogammaramp`.
 4. Run `unlock_gamma_range.reg` and restart PC. (Windows only)
-5. Set your preferred `mat_monitorgamma` and `mat_monitorgamma_tv_enabled`
+5. If you have multiple monitors configured with `Extend these displays`,
+   you might need to turn off all but the primary monitor. (Windows only)
+6. Set your preferred `mat_monitorgamma` and `mat_monitorgamma_tv_enabled`
    in `settings.ini`.
-6. f.lux and Redshift are not compatible: you have to disable both! It runs
+7. f.lux and Redshift are not compatible: you have to disable both! It runs
    perfectly with Windows Night Light though.
 
 

@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-from ctypes import byref, sizeof, Structure, windll, WinError
+from ctypes import byref, sizeof, Structure, windll
 from ctypes import create_unicode_buffer, POINTER
 from ctypes.wintypes import DWORD, HDC, WCHAR, WORD
 from winreg import (HKEY_LOCAL_MACHINE, OpenKeyEx, CloseKey, QueryValueEx,
@@ -71,7 +71,6 @@ class WinGdiContext(Context):
         while EnumDisplayDevices(None, device_num, byref(device), 0):
             if device.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE:
                 device_name = device.DeviceName
-                break
 
             device_num += 1
 
@@ -82,18 +81,17 @@ class WinGdiContext(Context):
         self._hdc = hdc
 
         if not hdc:
-            raise ContextError('Unable to create device context') \
-                  from WinError()
+            raise ContextError('Unable to create device context')
 
         cmcap = GetDeviceCaps(hdc, COLORMGMTCAPS)
 
         if not cmcap & CM_GAMMA_RAMP:
+            self._hdc = None
+
             if not DeleteDC(hdc):
-                raise ContextError('Unable to delete device context') \
-                      from WinError()
+                raise ContextError('Unable to delete device context')
 
             del hdc
-            self._hdc = None
 
         try:
             with self._get_dc() as hdc:
@@ -101,8 +99,14 @@ class WinGdiContext(Context):
 
                 if not cmcap & CM_GAMMA_RAMP:
                     raise ContextError('Display device does not support gamma '
-                                       'ramps') from WinError()
+                                       'ramps')
 
+                if not GetDeviceGammaRamp(hdc, byref((WORD * 256 * 3)())):
+                    if device_num > 1:
+                        raise ContextError('Unable to modify gamma ramp; turn '
+                                           'off all monitors except your primary')
+                    else:
+                        raise ContextError('Unable to modify gamma ramp')
             try:
                 key = None
                 key = OpenKeyEx(HKEY_LOCAL_MACHINE, ICM_KEY, access=KEY_READ |
@@ -148,8 +152,7 @@ class WinGdiContext(Context):
             ramp = (WORD * 256 * 3)()
 
             if not GetDeviceGammaRamp(hdc, byref(ramp)):
-                raise ContextError('Unable to get gamma ramp') \
-                      from WinError()
+                raise ContextError('Unable to get gamma ramp')
 
             return [[ramp[i][j] / 65535 for j in range(256)] for i in range(3)]
 
@@ -163,7 +166,7 @@ class WinGdiContext(Context):
         with self._get_dc() as hdc:
             if not SetDeviceGammaRamp(hdc, byref(_ramp)):
                 raise ContextError('Unable to set gamma ramp; has the gamma '
-                                   'range been unlocked yet?') from WinError()
+                                   'range been unlocked yet?')
 
     def close(self):
         try:
@@ -196,10 +199,8 @@ class WinGdiContext(Context):
                                 ramp[i][j] = j << 8
 
                     if not SetDeviceGammaRamp(hdc, byref(ramp)):
-                        raise ContextError('Unable to restore gamma ramp') \
-                              from WinError()
+                        raise ContextError('Unable to restore gamma ramp')
         finally:
             if self._hdc is not None:
                 if not DeleteDC(self._hdc):
-                    raise ContextError('Unable to delete device context') \
-                          from WinError()
+                    raise ContextError('Unable to delete device context')
